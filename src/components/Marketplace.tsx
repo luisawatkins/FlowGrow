@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import { PropertyCard } from '@/components/PropertyCard'
+import { PropertyModal } from '@/components/PropertyModal'
 import { useWallet } from '@/hooks/useWallet'
 import { ContractService } from '@/lib/contracts'
 import { Property } from '@/types'
@@ -13,6 +15,9 @@ export function Marketplace() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [buyingProperty, setBuyingProperty] = useState<string | null>(null)
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sortBy, setSortBy] = useState<'price' | 'name' | 'date'>('date')
 
   // Mock data for demonstration
   useEffect(() => {
@@ -87,12 +92,35 @@ export function Marketplace() {
       )
       
       alert(`Property purchased successfully! Transaction: ${tx.transactionHash}`)
+      setSelectedProperty(null) // Close modal
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to purchase property')
     } finally {
       setBuyingProperty(null)
     }
   }
+
+  const handleViewProperty = (property: Property) => {
+    setSelectedProperty(property)
+  }
+
+  const filteredAndSortedProperties = properties
+    .filter(property => 
+      property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.description.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'price':
+          return parseFloat(a.price) - parseFloat(b.price)
+        case 'name':
+          return a.name.localeCompare(b.name)
+        case 'date':
+        default:
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      }
+    })
 
   if (loading) {
     return (
@@ -120,76 +148,71 @@ export function Marketplace() {
         <p className="text-gray-600">Browse and purchase property NFTs</p>
       </div>
 
-      {properties.length === 0 ? (
+      {/* Search and Filter Controls */}
+      <Card className="mb-6">
+        <CardContent className="p-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search properties..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'price' | 'name' | 'date')}
+                className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="date">Sort by Date</option>
+                <option value="price">Sort by Price</option>
+                <option value="name">Sort by Name</option>
+              </select>
+              <Button
+                onClick={() => setProperties(prev => [...prev])}
+                variant="outline"
+                size="sm"
+              >
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {filteredAndSortedProperties.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-gray-600">No properties available for sale</p>
+          <p className="text-gray-600">
+            {searchTerm ? 'No properties match your search' : 'No properties available for sale'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {properties.map((property) => (
-            <Card key={property.id} className="overflow-hidden">
-              <div className="h-48 bg-gray-200 flex items-center justify-center">
-                {property.imageUrl ? (
-                  <img 
-                    src={property.imageUrl} 
-                    alt={property.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-gray-400 text-4xl">🏠</div>
-                )}
-              </div>
-              
-              <CardHeader>
-                <CardTitle className="text-xl">{property.name}</CardTitle>
-                <CardDescription className="line-clamp-2">
-                  {property.description}
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Address:</span>
-                    <span className="font-medium">{property.address}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Square Feet:</span>
-                    <span className="font-medium">{property.squareFootage.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Owner:</span>
-                    <span className="font-mono text-xs">
-                      {property.owner}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between pt-4">
-                  <div>
-                    <span className="text-2xl font-bold text-blue-600">
-                      {property.price} FLOW
-                    </span>
-                  </div>
-                  
-                  <Button
-                    onClick={() => handleBuyProperty(property)}
-                    disabled={buyingProperty === property.id || property.owner === address}
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    {buyingProperty === property.id 
-                      ? 'Buying...' 
-                      : property.owner === address 
-                        ? 'Your Property' 
-                        : 'Buy Now'
-                    }
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          {filteredAndSortedProperties.map((property) => (
+            <PropertyCard
+              key={property.id}
+              property={property}
+              onBuy={handleBuyProperty}
+              onView={handleViewProperty}
+              isBuying={buyingProperty === property.id}
+              currentUser={address}
+            />
           ))}
         </div>
       )}
+
+      {/* Property Modal */}
+      <PropertyModal
+        property={selectedProperty}
+        isOpen={!!selectedProperty}
+        onClose={() => setSelectedProperty(null)}
+        onBuy={handleBuyProperty}
+        isBuying={buyingProperty === selectedProperty?.id}
+        currentUser={address}
+      />
     </div>
   )
 }
