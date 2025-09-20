@@ -2,23 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
-
-interface Property {
-  id: string
-  name: string
-  description: string
-  address: string
-  squareFootage: number
-  price: string
-  owner: string
-  imageUrl?: string
-  isListed: boolean
-}
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import { useWallet } from '@/hooks/useWallet'
+import { ContractService } from '@/lib/contracts'
+import { Property } from '@/types'
 
 export function Marketplace() {
+  const { provider, signer, address } = useWallet()
   const [properties, setProperties] = useState<Property[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [buyingProperty, setBuyingProperty] = useState<string | null>(null)
 
   // Mock data for demonstration
   useEffect(() => {
@@ -32,6 +26,8 @@ export function Marketplace() {
         price: '150.50',
         owner: '0x1234...5678',
         isListed: true,
+        tokenId: '1',
+        contractAddress: '0x1234...5678',
       },
       {
         id: '2',
@@ -42,6 +38,8 @@ export function Marketplace() {
         price: '300.75',
         owner: '0x9876...5432',
         isListed: true,
+        tokenId: '2',
+        contractAddress: '0x1234...5678',
       },
       {
         id: '3',
@@ -52,6 +50,8 @@ export function Marketplace() {
         price: '500.00',
         owner: '0xabcd...efgh',
         isListed: true,
+        tokenId: '3',
+        contractAddress: '0x1234...5678',
       },
     ]
 
@@ -62,13 +62,35 @@ export function Marketplace() {
     }, 1000)
   }, [])
 
-  const handleBuyProperty = async (propertyId: string) => {
+  const handleBuyProperty = async (property: Property) => {
+    if (!provider || !signer) {
+      setError('Wallet not connected')
+      return
+    }
+
+    setBuyingProperty(property.id)
+    setError(null)
+
     try {
-      // TODO: Implement actual purchase logic
-      console.log('Buying property:', propertyId)
-      alert(`Purchase initiated for property ${propertyId}`)
+      const contractService = new ContractService(provider, signer)
+      
+      // Buy the property
+      const tx = await contractService.buyProperty(property.tokenId!, property.price)
+      
+      // Update local state
+      setProperties(prev => 
+        prev.map(p => 
+          p.id === property.id 
+            ? { ...p, owner: address!, isListed: false }
+            : p
+        )
+      )
+      
+      alert(`Property purchased successfully! Transaction: ${tx.transactionHash}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to purchase property')
+    } finally {
+      setBuyingProperty(null)
     }
   }
 
@@ -105,7 +127,7 @@ export function Marketplace() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {properties.map((property) => (
-            <div key={property.id} className="bg-white rounded-lg shadow-lg overflow-hidden">
+            <Card key={property.id} className="overflow-hidden">
               <div className="h-48 bg-gray-200 flex items-center justify-center">
                 {property.imageUrl ? (
                   <img 
@@ -118,33 +140,32 @@ export function Marketplace() {
                 )}
               </div>
               
-              <div className="p-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {property.name}
-                </h3>
-                
-                <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+              <CardHeader>
+                <CardTitle className="text-xl">{property.name}</CardTitle>
+                <CardDescription className="line-clamp-2">
                   {property.description}
-                </p>
-                
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Address:</span>
-                    <span className="text-gray-900">{property.address}</span>
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent className="space-y-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Address:</span>
+                    <span className="font-medium">{property.address}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Square Feet:</span>
-                    <span className="text-gray-900">{property.squareFootage.toLocaleString()}</span>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Square Feet:</span>
+                    <span className="font-medium">{property.squareFootage.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Owner:</span>
-                    <span className="text-gray-900 font-mono text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Owner:</span>
+                    <span className="font-mono text-xs">
                       {property.owner}
                     </span>
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pt-4">
                   <div>
                     <span className="text-2xl font-bold text-blue-600">
                       {property.price} FLOW
@@ -152,14 +173,20 @@ export function Marketplace() {
                   </div>
                   
                   <Button
-                    onClick={() => handleBuyProperty(property.id)}
+                    onClick={() => handleBuyProperty(property)}
+                    disabled={buyingProperty === property.id || property.owner === address}
                     className="bg-green-600 hover:bg-green-700 text-white"
                   >
-                    Buy Now
+                    {buyingProperty === property.id 
+                      ? 'Buying...' 
+                      : property.owner === address 
+                        ? 'Your Property' 
+                        : 'Buy Now'
+                    }
                   </Button>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

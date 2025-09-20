@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react'
 import { ConnectWallet } from '@/components/ConnectWallet'
 import { PropertyMintForm } from '@/components/PropertyMintForm'
 import { Marketplace } from '@/components/Marketplace'
+import { TransactionTracker } from '@/components/TransactionTracker'
 import { Header } from '@/components/Header'
 import { useWallet } from '@/hooks/useWallet'
+import { useTransactions } from '@/hooks/useTransactions'
 
 export default function Home() {
   const { isConnected, address } = useWallet()
-  const [activeTab, setActiveTab] = useState<'marketplace' | 'mint'>('marketplace')
+  const { transactions, refreshTransactions } = useTransactions()
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'mint' | 'transactions'>('marketplace')
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -27,7 +30,7 @@ export default function Home() {
             <ConnectWallet />
           </div>
         ) : (
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             <div className="flex justify-center mb-8">
               <div className="bg-white rounded-lg p-1 shadow-sm">
                 <button
@@ -50,13 +53,26 @@ export default function Home() {
                 >
                   Mint Property
                 </button>
+                <button
+                  onClick={() => setActiveTab('transactions')}
+                  className={`px-6 py-2 rounded-md transition-colors ${
+                    activeTab === 'transactions'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Transactions
+                </button>
               </div>
             </div>
 
-            {activeTab === 'marketplace' ? (
-              <Marketplace />
-            ) : (
-              <PropertyMintForm />
+            {activeTab === 'marketplace' && <Marketplace />}
+            {activeTab === 'mint' && <PropertyMintForm />}
+            {activeTab === 'transactions' && (
+              <TransactionTracker 
+                transactions={transactions} 
+                onRefresh={refreshTransactions}
+              />
             )}
           </div>
         )}
