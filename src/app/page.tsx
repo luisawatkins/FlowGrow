@@ -5,6 +5,7 @@ import { ConnectWallet } from '@/components/ConnectWallet'
 import { PropertyMintForm } from '@/components/PropertyMintForm'
 import { Marketplace } from '@/components/Marketplace'
 import { TransactionTracker } from '@/components/TransactionTracker'
+import { UserDashboard } from '@/components/UserDashboard'
 import { Header } from '@/components/Header'
 import { useWallet } from '@/hooks/useWallet'
 import { useTransactions } from '@/hooks/useTransactions'
@@ -12,7 +13,7 @@ import { useTransactions } from '@/hooks/useTransactions'
 export default function Home() {
   const { isConnected, address } = useWallet()
   const { transactions, refreshTransactions } = useTransactions()
-  const [activeTab, setActiveTab] = useState<'marketplace' | 'mint' | 'transactions'>('marketplace')
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'mint' | 'transactions' | 'dashboard'>('marketplace')
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -54,6 +55,16 @@ export default function Home() {
                   Mint Property
                 </button>
                 <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`px-6 py-2 rounded-md transition-colors ${
+                    activeTab === 'dashboard'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  My Properties
+                </button>
+                <button
                   onClick={() => setActiveTab('transactions')}
                   className={`px-6 py-2 rounded-md transition-colors ${
                     activeTab === 'transactions'
@@ -68,6 +79,7 @@ export default function Home() {
 
             {activeTab === 'marketplace' && <Marketplace />}
             {activeTab === 'mint' && <PropertyMintForm />}
+            {activeTab === 'dashboard' && <UserDashboard />}
             {activeTab === 'transactions' && (
               <TransactionTracker 
                 transactions={transactions} 
