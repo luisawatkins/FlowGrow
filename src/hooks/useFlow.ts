@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { flowClient } from '@/lib/flowClient'
+import { FlowError, FlowErrorType, createFlowError, getUserFriendlyMessage } from '@/types/errors'
+import { withRetry, retryFlowTransaction, retryFlowQuery } from '@/lib/retry'
 
 interface FlowUser {
   addr: string
@@ -12,7 +14,9 @@ interface FlowState {
   user: FlowUser | null
   isConnected: boolean
   isLoading: boolean
-  error: string | null
+  error: FlowError | null
+  retryCount: number
+  lastOperation: string | null
 }
 
 export function useFlow() {
@@ -21,7 +25,39 @@ export function useFlow() {
     isConnected: false,
     isLoading: true,
     error: null,
+    retryCount: 0,
+    lastOperation: null,
   })
+
+  // Helper function to handle errors consistently
+  const handleError = (error: unknown, operation: string, context?: Record<string, any>): FlowError => {
+    let flowError: FlowError
+    
+    if (error instanceof Error && 'type' in error) {
+      flowError = error as FlowError
+    } else {
+      const message = error instanceof Error ? error.message : String(error)
+      flowError = createFlowError(
+        FlowErrorType.UNKNOWN_ERROR,
+        message,
+        { context: { operation, ...context } }
+      )
+    }
+    
+    setState(prev => ({
+      ...prev,
+      error: flowError,
+      isLoading: false,
+      lastOperation: operation,
+    }))
+    
+    return flowError
+  }
+
+  // Helper function to clear errors
+  const clearError = () => {
+    setState(prev => ({ ...prev, error: null, retryCount: 0 }))
+  }
 
   // Initialize Flow client
   useEffect(() => {
@@ -29,21 +65,21 @@ export function useFlow() {
       try {
         setState(prev => ({ ...prev, isLoading: true, error: null }))
         
-        const user = await flowClient.getCurrentUser()
+        const user = await withRetry(
+          () => flowClient.getCurrentUser(),
+          { maxRetries: 2, retryDelay: 1000 }
+        )
         
         setState({
           user: user,
           isConnected: user.loggedIn,
           isLoading: false,
           error: null,
+          retryCount: 0,
+          lastOperation: null,
         })
       } catch (error) {
-        setState({
-          user: null,
-          isConnected: false,
-          isLoading: false,
-          error: error instanceof Error ? error.message : 'Failed to initialize Flow client',
-        })
+        handleError(error, 'initialize', { step: 'getCurrentUser' })
       }
     }
 
@@ -55,21 +91,26 @@ export function useFlow() {
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }))
       
-      await flowClient.authenticate()
-      const user = await flowClient.getCurrentUser()
+      await withRetry(
+        () => flowClient.authenticate(),
+        { maxRetries: 3, retryDelay: 1000 }
+      )
+      
+      const user = await withRetry(
+        () => flowClient.getCurrentUser(),
+        { maxRetries: 2, retryDelay: 500 }
+      )
       
       setState({
         user: user,
         isConnected: user.loggedIn,
         isLoading: false,
         error: null,
+        retryCount: 0,
+        lastOperation: null,
       })
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to connect to Flow wallet',
-      }))
+      handleError(error, 'connect', { step: 'authenticate' })
     }
   }
 
@@ -83,12 +124,11 @@ export function useFlow() {
         isConnected: false,
         isLoading: false,
         error: null,
+        retryCount: 0,
+        lastOperation: null,
       })
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to disconnect from Flow wallet',
-      }))
+      handleError(error, 'disconnect', { step: 'unauthenticate' })
     }
   }
 
@@ -102,34 +142,44 @@ export function useFlow() {
     imageURL?: string
   ) => {
     try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }))
+      setState(prev => ({ ...prev, isLoading: true, error: null, lastOperation: 'mintProperty' }))
       
-      const transactionId = await flowClient.mintProperty(
-        name,
-        description,
-        physicalAddress,
-        squareFootage,
-        price,
-        imageURL
+      const retryManager = retryFlowTransaction()
+      const result = await retryManager.execute(() =>
+        flowClient.mintProperty(
+          name,
+          description,
+          physicalAddress,
+          squareFootage,
+          price,
+          imageURL
+        )
       )
       
-      setState(prev => ({ ...prev, isLoading: false }))
-      
-      return {
-        success: true,
-        transactionId,
-        flowScanUrl: flowClient.getFlowScanUrl(transactionId),
+      if (result.success) {
+        setState(prev => ({ ...prev, isLoading: false, retryCount: 0 }))
+        
+        return {
+          success: true,
+          transactionId: result.data,
+          flowScanUrl: flowClient.getFlowScanUrl(result.data),
+        }
+      } else {
+        throw result.error
       }
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to mint property',
-      }))
+      const flowError = handleError(error, 'mintProperty', {
+        name,
+        squareFootage,
+        price,
+        hasImage: !!imageURL
+      })
       
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to mint property',
+        error: getUserFriendlyMessage(flowError),
+        errorType: flowError.type,
+        retryable: flowError.retryable,
       }
     }
   }
@@ -137,27 +187,35 @@ export function useFlow() {
   // List property for sale
   const listProperty = async (propertyID: number, price: number) => {
     try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }))
+      setState(prev => ({ ...prev, isLoading: true, error: null, lastOperation: 'listProperty' }))
       
-      const transactionId = await flowClient.listProperty(propertyID, price)
+      const retryManager = retryFlowTransaction()
+      const result = await retryManager.execute(() =>
+        flowClient.listProperty(propertyID, price)
+      )
       
-      setState(prev => ({ ...prev, isLoading: false }))
-      
-      return {
-        success: true,
-        transactionId,
-        flowScanUrl: flowClient.getFlowScanUrl(transactionId),
+      if (result.success) {
+        setState(prev => ({ ...prev, isLoading: false, retryCount: 0 }))
+        
+        return {
+          success: true,
+          transactionId: result.data,
+          flowScanUrl: flowClient.getFlowScanUrl(result.data),
+        }
+      } else {
+        throw result.error
       }
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to list property',
-      }))
+      const flowError = handleError(error, 'listProperty', {
+        propertyID,
+        price
+      })
       
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to list property',
+        error: getUserFriendlyMessage(flowError),
+        errorType: flowError.type,
+        retryable: flowError.retryable,
       }
     }
   }
@@ -165,27 +223,35 @@ export function useFlow() {
   // Buy property
   const buyProperty = async (listingID: number, sellerAddress: string) => {
     try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }))
+      setState(prev => ({ ...prev, isLoading: true, error: null, lastOperation: 'buyProperty' }))
       
-      const transactionId = await flowClient.buyProperty(listingID, sellerAddress)
+      const retryManager = retryFlowTransaction()
+      const result = await retryManager.execute(() =>
+        flowClient.buyProperty(listingID, sellerAddress)
+      )
       
-      setState(prev => ({ ...prev, isLoading: false }))
-      
-      return {
-        success: true,
-        transactionId,
-        flowScanUrl: flowClient.getFlowScanUrl(transactionId),
+      if (result.success) {
+        setState(prev => ({ ...prev, isLoading: false, retryCount: 0 }))
+        
+        return {
+          success: true,
+          transactionId: result.data,
+          flowScanUrl: flowClient.getFlowScanUrl(result.data),
+        }
+      } else {
+        throw result.error
       }
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to buy property',
-      }))
+      const flowError = handleError(error, 'buyProperty', {
+        listingID,
+        sellerAddress
+      })
       
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to buy property',
+        error: getUserFriendlyMessage(flowError),
+        errorType: flowError.type,
+        retryable: flowError.retryable,
       }
     }
   }
@@ -193,15 +259,17 @@ export function useFlow() {
   // Get marketplace data
   const getMarketplaceData = async () => {
     try {
+      const retryManager = retryFlowQuery()
+      
       const [totalSupply, activeListings] = await Promise.all([
-        flowClient.getTotalSupply(),
-        flowClient.getActiveListings(),
+        retryManager.execute(() => flowClient.getTotalSupply()),
+        retryManager.execute(() => flowClient.getActiveListings()),
       ])
       
       return {
-        totalSupply,
-        activeListings: activeListings.length,
-        listings: activeListings,
+        totalSupply: totalSupply.success ? totalSupply.data : 0,
+        activeListings: activeListings.success ? activeListings.data.length : 0,
+        listings: activeListings.success ? activeListings.data : [],
       }
     } catch (error) {
       console.error('Failed to get marketplace data:', error)
@@ -216,7 +284,10 @@ export function useFlow() {
   // Get property details
   const getProperty = async (propertyID: number) => {
     try {
-      return await flowClient.getProperty(propertyID)
+      const retryManager = retryFlowQuery()
+      const result = await retryManager.execute(() => flowClient.getProperty(propertyID))
+      
+      return result.success ? result.data : null
     } catch (error) {
       console.error('Failed to get property:', error)
       return null
@@ -226,11 +297,28 @@ export function useFlow() {
   // Get transaction status
   const getTransactionStatus = async (transactionId: string) => {
     try {
-      return await flowClient.getTransactionStatus(transactionId)
+      const retryManager = retryFlowQuery()
+      const result = await retryManager.execute(() => flowClient.getTransactionStatus(transactionId))
+      
+      return result.success ? result.data : 'UNKNOWN'
     } catch (error) {
       console.error('Failed to get transaction status:', error)
       return 'UNKNOWN'
     }
+  }
+
+  // Retry last failed operation
+  const retryLastOperation = async () => {
+    if (!state.lastOperation || state.isLoading) {
+      return { success: false, error: 'No operation to retry' }
+    }
+
+    setState(prev => ({ ...prev, retryCount: prev.retryCount + 1 }))
+    
+    // This would need to be implemented based on the last operation
+    // For now, we'll just clear the error and let the user try again
+    clearError()
+    return { success: true }
   }
 
   return {
@@ -243,5 +331,7 @@ export function useFlow() {
     getMarketplaceData,
     getProperty,
     getTransactionStatus,
+    retryLastOperation,
+    clearError,
   }
 }

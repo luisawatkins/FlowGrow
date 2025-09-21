@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useFlow } from '@/hooks/useFlow'
+import { FlowErrorDisplay } from './FlowErrorDisplay'
+import { FlowError } from '@/types/errors'
 
 interface FlowTransaction {
   id: string
@@ -20,12 +22,15 @@ interface FlowTransaction {
 interface FlowTransactionTrackerProps {
   transactions: FlowTransaction[]
   onRefresh?: () => void
+  error?: FlowError | null
+  onRetry?: () => void
 }
 
-export function FlowTransactionTracker({ transactions, onRefresh }: FlowTransactionTrackerProps) {
+export function FlowTransactionTracker({ transactions, onRefresh, error, onRetry }: FlowTransactionTrackerProps) {
   const { getTransactionStatus } = useFlow()
   const [filter, setFilter] = useState<'all' | 'pending' | 'success' | 'failed'>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'mint' | 'list' | 'buy' | 'cancel'>('all')
+  const [showErrorDetails, setShowErrorDetails] = useState(false)
 
   const filteredTransactions = transactions.filter(tx => {
     const statusMatch = filter === 'all' || tx.status === filter
@@ -87,14 +92,36 @@ export function FlowTransactionTracker({ transactions, onRefresh }: FlowTransact
               Track all your Flow blockchain transactions
             </CardDescription>
           </div>
-          {onRefresh && (
-            <Button onClick={onRefresh} variant="outline" size="sm">
-              Refresh
-            </Button>
-          )}
+          <div className="flex space-x-2">
+            {onRefresh && (
+              <Button onClick={onRefresh} variant="outline" size="sm">
+                Refresh
+              </Button>
+            )}
+            {error && (
+              <Button 
+                onClick={() => setShowErrorDetails(!showErrorDetails)} 
+                variant="outline" 
+                size="sm"
+              >
+                {showErrorDetails ? 'Hide' : 'Show'} Error Details
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4">
+            <FlowErrorDisplay
+              error={error}
+              onRetry={onRetry}
+              onDismiss={() => setShowErrorDetails(false)}
+              showDetails={showErrorDetails}
+            />
+          </div>
+        )}
         {/* Filter buttons */}
         <div className="flex flex-wrap gap-2 mb-4">
           <div className="flex space-x-1">
