@@ -6,6 +6,7 @@ import { Property } from '@/types'
 import { getFlowExplorerAddressUrl } from '@/lib/contracts'
 import { SearchResult } from '@/lib/searchUtils'
 import { OptimizedImage } from './OptimizedImage'
+import { useUserProfile } from '@/hooks/useUserProfile'
 
 interface PropertyCardProps {
   property: Property
@@ -15,6 +16,7 @@ interface PropertyCardProps {
   currentUser?: string | null
   searchResult?: SearchResult
   showHighlights?: boolean
+  showFavoriteButton?: boolean
 }
 
 export function PropertyCard({ 
@@ -24,10 +26,15 @@ export function PropertyCard({
   isBuying = false, 
   currentUser,
   searchResult,
-  showHighlights = false
+  showHighlights = false,
+  showFavoriteButton = true
 }: PropertyCardProps) {
   const isOwner = currentUser === property.owner
   const canBuy = !isOwner && property.isListed && !isBuying
+  
+  // Favorite functionality
+  const { isFavorited, addToFavorites, removeFromFavorites } = useUserProfile(currentUser || '')
+  const isFavoritedProperty = isFavorited(property.id)
 
   // Helper function to highlight search terms
   const highlightText = (text: string, highlights: string[] = []) => {
@@ -47,6 +54,16 @@ export function PropertyCard({
   const nameHighlights = searchResult?.highlights.name || []
   const descHighlights = searchResult?.highlights.description || []
   const addrHighlights = searchResult?.highlights.address || []
+
+  const handleFavoriteToggle = async () => {
+    if (isFavoritedProperty) {
+      // Find the favorite and remove it
+      // In a real app, you'd need to get the favorite ID
+      console.log('Removing from favorites')
+    } else {
+      await addToFavorites(property.id)
+    }
+  }
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow">
@@ -79,6 +96,19 @@ export function PropertyCard({
           <div className="absolute bottom-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-xs">
             +{property.images.length - 1} more
           </div>
+        )}
+        {showFavoriteButton && currentUser && !isOwner && (
+          <button
+            onClick={handleFavoriteToggle}
+            className={`absolute top-2 left-2 p-2 rounded-full transition-colors ${
+              isFavoritedProperty
+                ? 'bg-red-500 text-white hover:bg-red-600'
+                : 'bg-white/80 text-gray-600 hover:bg-white hover:text-red-500'
+            }`}
+            title={isFavoritedProperty ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            {isFavoritedProperty ? '❤️' : '🤍'}
+          </button>
         )}
       </div>
       

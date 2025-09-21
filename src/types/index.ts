@@ -77,3 +77,66 @@ export interface MarketplaceListing {
   createdAt: string
   updatedAt: string
 }
+
+export interface UserProfile {
+  id: string
+  address: string
+  username?: string
+  displayName?: string
+  bio?: string
+  avatar?: string
+  email?: string
+  preferences: UserPreferences
+  stats: UserStats
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UserPreferences {
+  theme: 'light' | 'dark' | 'system'
+  currency: 'FLOW' | 'USD' | 'EUR'
+  language: string
+  notifications: {
+    email: boolean
+    push: boolean
+    marketing: boolean
+    propertyUpdates: boolean
+    priceChanges: boolean
+  }
+  privacy: {
+    showEmail: boolean
+    showProfile: boolean
+    showActivity: boolean
+  }
+}
+
+export interface UserStats {
+  totalProperties: number
+  propertiesListed: number
+  propertiesSold: number
+  propertiesBought: number
+  totalSpent: number
+  totalEarned: number
+  favoritesCount: number
+  joinDate: string
+  lastActive: string
+}
+
+export interface FavoriteProperty {
+  id: string
+  userId: string
+  propertyId: string
+  property: Property
+  addedAt: string
+  notes?: string
+  tags?: string[]
+}
+
+export interface UserActivity {
+  id: string
+  userId: string
+  type: 'property_minted' | 'property_listed' | 'property_bought' | 'property_sold' | 'favorite_added' | 'profile_updated'
+  description: string
+  metadata?: Record<string, any>
+  timestamp: string
+}

@@ -1,307 +1,321 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { PropertyCard } from '@/components/PropertyCard'
+import { UserProfileComponent, UserPreferencesComponent } from './UserProfile'
+import { FavoritesManager } from './FavoritesManager'
+import { PropertyCard } from './PropertyCard'
+import { PropertyModal } from './PropertyModal'
+import { useUserProfile } from '@/hooks/useUserProfile'
 import { Property } from '@/types'
-import { useWallet } from '@/hooks/useWallet'
-import { ContractService } from '@/lib/contracts'
 
-export function UserDashboard() {
-  const { provider, signer, address } = useWallet()
-  const [userProperties, setUserProperties] = useState<Property[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'owned' | 'listed' | 'sold'>('owned')
+interface UserDashboardProps {
+  userAddress: string
+  className?: string
+}
 
-  useEffect(() => {
-    if (address) {
-      fetchUserProperties()
-    }
-  }, [address])
+type DashboardTab = 'overview' | 'profile' | 'favorites' | 'properties' | 'settings'
 
-  const fetchUserProperties = async () => {
-    if (!address) return
+export function UserDashboard({ userAddress, className = '' }: UserDashboardProps) {
+  const { profile, updatePreferences, activities, isLoading } = useUserProfile(userAddress)
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null)
 
-    setLoading(true)
-    setError(null)
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'profile', label: 'Profile', icon: '👤' },
+    { id: 'favorites', label: 'Favorites', icon: '❤️' },
+    { id: 'properties', label: 'My Properties', icon: '🏠' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  ]
 
-    try {
-      // Mock data for demonstration
-      const mockProperties: Property[] = [
-        {
-          id: '1',
-          name: 'My Downtown Condo',
-          description: 'Modern 2-bedroom condo with city views',
-          address: '123 Main St, Downtown, NY 10001',
-          squareFootage: 1200,
-          price: '150.50',
-          owner: address,
-          isListed: true,
-          tokenId: '1',
-          contractAddress: '0x1234...5678',
-        },
-        {
-          id: '2',
-          name: 'Suburban House',
-          description: 'Spacious family home with large backyard',
-          address: '456 Oak Ave, Suburbia, CA 90210',
-          squareFootage: 2500,
-          price: '300.75',
-          owner: address,
-          isListed: false,
-          tokenId: '2',
-          contractAddress: '0x1234...5678',
-        },
-      ]
-
-      setUserProperties(mockProperties)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch properties')
-    } finally {
-      setLoading(false)
-    }
+  const handleViewProperty = (property: Property) => {
+    setSelectedProperty(property)
   }
 
-  const handleListProperty = async (property: Property) => {
-    if (!provider || !signer) {
-      setError('Wallet not connected')
-      return
-    }
-
-    try {
-      const contractService = new ContractService(provider, signer)
-      
-      // List the property on marketplace
-      await contractService.listProperty(property.tokenId!, property.price)
-      
-      // Update local state
-      setUserProperties(prev =>
-        prev.map(p =>
-          p.id === property.id ? { ...p, isListed: true } : p
-        )
-      )
-      
-      alert('Property listed successfully!')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to list property')
-    }
+  const handleBuyProperty = (property: Property) => {
+    // In a real app, this would handle the purchase
+    console.log('Buying property:', property)
   }
 
-  const handleDelistProperty = async (property: Property) => {
-    if (!provider || !signer) {
-      setError('Wallet not connected')
-      return
-    }
-
-    try {
-      const contractService = new ContractService(provider, signer)
-      
-      // Delist the property
-      await contractService.cancelListing(property.tokenId!)
-      
-      // Update local state
-      setUserProperties(prev =>
-        prev.map(p =>
-          p.id === property.id ? { ...p, isListed: false } : p
-        )
-      )
-      
-      alert('Property delisted successfully!')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delist property')
-    }
-  }
-
-  const filteredProperties = userProperties.filter(property => {
-    switch (activeTab) {
-      case 'owned':
-        return true
-      case 'listed':
-        return property.isListed
-      case 'sold':
-        return false // Mock data doesn't include sold properties
-      default:
-        return true
-    }
-  })
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="text-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Loading your properties...</p>
+      <div className={`flex items-center justify-center p-8 ${className}`}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
       </div>
     )
   }
 
-  if (error) {
+  if (!profile) {
     return (
-      <div className="text-center py-20">
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md max-w-md mx-auto">
-          <p className="text-red-600">{error}</p>
-          <Button onClick={fetchUserProperties} className="mt-2">
-            Try Again
-          </Button>
-        </div>
+      <div className={`text-center p-8 ${className}`}>
+        <p className="text-gray-600">Profile not found</p>
       </div>
     )
   }
 
   return (
-    <div>
-      <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Your Properties</h2>
-        <p className="text-gray-600">Manage your property NFTs</p>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Properties</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{userProperties.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Listed for Sale</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {userProperties.filter(p => p.isListed).length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Value</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {userProperties.reduce((sum, p) => sum + parseFloat(p.price), 0).toFixed(2)} FLOW
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="flex justify-center mb-8">
-        <div className="bg-white rounded-lg p-1 shadow-sm">
-          <button
-            onClick={() => setActiveTab('owned')}
-            className={`px-6 py-2 rounded-md transition-colors ${
-              activeTab === 'owned'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            All Properties
-          </button>
-          <button
-            onClick={() => setActiveTab('listed')}
-            className={`px-6 py-2 rounded-md transition-colors ${
-              activeTab === 'listed'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Listed
-          </button>
-          <button
-            onClick={() => setActiveTab('sold')}
-            className={`px-6 py-2 rounded-md transition-colors ${
-              activeTab === 'sold'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Sold
-          </button>
-        </div>
-      </div>
-
-      {/* Properties Grid */}
-      {filteredProperties.length === 0 ? (
-        <div className="text-center py-20">
-          <p className="text-gray-600">
-            {activeTab === 'owned' && 'You don\'t own any properties yet'}
-            {activeTab === 'listed' && 'You don\'t have any properties listed for sale'}
-            {activeTab === 'sold' && 'You haven\'t sold any properties yet'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProperties.map((property) => (
-            <Card key={property.id} className="overflow-hidden">
-              <div className="h-48 bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
-                {property.imageUrl ? (
-                  <img 
-                    src={property.imageUrl} 
-                    alt={property.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-6xl text-blue-300">🏠</div>
-                )}
-                {property.isListed && (
-                  <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium">
-                    Listed
-                  </div>
-                )}
-              </div>
-              
-              <CardHeader>
-                <CardTitle className="text-xl line-clamp-1">{property.name}</CardTitle>
-                <CardDescription className="line-clamp-2">
-                  {property.description}
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Address:</span>
-                    <span className="font-medium text-right max-w-[200px] truncate" title={property.address}>
-                      {property.address}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Square Feet:</span>
-                    <span className="font-medium">{property.squareFootage.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Price:</span>
-                    <span className="font-bold text-blue-600">{property.price} FLOW</span>
-                  </div>
-                </div>
-                
-                <div className="flex space-x-2 pt-4 border-t">
-                  {property.isListed ? (
-                    <Button
-                      onClick={() => handleDelistProperty(property)}
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      Delist
-                    </Button>
+    <div className={className}>
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Sidebar */}
+        <div className="lg:w-64 flex-shrink-0">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                  {profile.avatar ? (
+                    <img
+                      src={profile.avatar}
+                      alt={profile.displayName || 'User'}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
-                    <Button
-                      onClick={() => handleListProperty(property)}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                    >
-                      List for Sale
-                    </Button>
+                    <div className="text-lg text-gray-400">👤</div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+                <div>
+                  <h3 className="font-semibold">{profile.displayName || 'User'}</h3>
+                  <p className="text-sm text-gray-600">@{profile.username}</p>
+                </div>
+              </div>
+            </CardHeader>
+            
+            <CardContent className="p-0">
+              <nav className="space-y-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as DashboardTab)}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                      activeTab === tab.id
+                        ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
+                        : 'text-gray-700'
+                    }`}
+                  >
+                    <span className="text-lg">{tab.icon}</span>
+                    <span className="font-medium">{tab.label}</span>
+                  </button>
+                ))}
+              </nav>
+            </CardContent>
+          </Card>
         </div>
-      )}
+
+        {/* Main Content */}
+        <div className="flex-1">
+          {activeTab === 'overview' && (
+            <OverviewTab profile={profile} activities={activities} />
+          )}
+          
+          {activeTab === 'profile' && (
+            <UserProfileComponent userAddress={userAddress} />
+          )}
+          
+          {activeTab === 'favorites' && (
+            <FavoritesManager
+              userAddress={userAddress}
+              onViewProperty={handleViewProperty}
+              onBuyProperty={handleBuyProperty}
+            />
+          )}
+          
+          {activeTab === 'properties' && (
+            <MyPropertiesTab userAddress={userAddress} />
+          )}
+          
+          {activeTab === 'settings' && (
+            <UserPreferencesComponent
+              preferences={profile.preferences}
+              onUpdate={updatePreferences}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Property Modal */}
+      <PropertyModal
+        property={selectedProperty}
+        isOpen={!!selectedProperty}
+        onClose={() => setSelectedProperty(null)}
+        onBuy={handleBuyProperty}
+        currentUser={userAddress}
+      />
     </div>
   )
+}
+
+// Overview Tab Component
+interface OverviewTabProps {
+  profile: any
+  activities: any[]
+}
+
+function OverviewTab({ profile, activities }: OverviewTabProps) {
+  return (
+    <div className="space-y-6">
+      {/* Welcome Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Welcome back, {profile.displayName || 'User'}!</CardTitle>
+          <CardDescription>
+            Here's what's happening with your properties and account.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold text-blue-600">
+                {profile.stats.totalProperties}
+              </div>
+              <div className="text-sm text-gray-600">Total Properties</div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold text-green-600">
+                {profile.stats.propertiesSold}
+              </div>
+              <div className="text-sm text-gray-600">Properties Sold</div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold text-purple-600">
+                {profile.stats.favoritesCount}
+              </div>
+              <div className="text-sm text-gray-600">Favorites</div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold text-orange-600">
+                {profile.stats.totalEarned}
+              </div>
+              <div className="text-sm text-gray-600">Total Earned (FLOW)</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+          <CardDescription>
+            Your latest property-related activities
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {activities.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <div className="text-4xl mb-2">📝</div>
+              <p>No recent activity</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activities.slice(0, 5).map((activity) => (
+                <div key={activity.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="text-lg">
+                    {getActivityIcon(activity.type)}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{activity.description}</p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(activity.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// My Properties Tab Component
+interface MyPropertiesTabProps {
+  userAddress: string
+}
+
+function MyPropertiesTab({ userAddress }: MyPropertiesTabProps) {
+  // In a real app, this would fetch the user's properties
+  const [properties] = useState<Property[]>([])
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>My Properties</CardTitle>
+          <CardDescription>
+            Properties you own or have listed for sale
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {properties.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-6xl text-gray-300 mb-4">🏠</div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No properties yet
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Start by minting your first property NFT!
+              </p>
+              <Button>
+                Mint Property
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {properties.map((property) => (
+                <PropertyCard
+                  key={property.id}
+                  property={property}
+                  currentUser={userAddress}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// Helper function to get activity icons
+function getActivityIcon(type: string): string {
+  switch (type) {
+    case 'property_minted':
+      return '🏗️'
+    case 'property_listed':
+      return '📋'
+    case 'property_bought':
+      return '💰'
+    case 'property_sold':
+      return '💸'
+    case 'favorite_added':
+      return '❤️'
+    case 'profile_updated':
+      return '✏️'
+    default:
+      return '📝'
+  }
 }
