@@ -7,11 +7,37 @@ export interface Property {
   price: string
   owner: string
   imageUrl?: string
+  images?: PropertyImage[]
   isListed: boolean
   tokenId?: string
   contractAddress?: string
   createdAt?: string
   updatedAt?: string
+  // Enhanced property details
+  bedrooms?: number
+  bathrooms?: number
+  yearBuilt?: number
+  propertyType?: 'condo' | 'house' | 'villa' | 'apartment' | 'townhouse'
+  features?: string[]
+  amenities?: string[]
+  location?: {
+    city: string
+    state: string
+    country: string
+    coordinates?: {
+      lat: number
+      lng: number
+    }
+  }
+}
+
+export interface PropertyImage {
+  id: string
+  url: string
+  alt: string
+  isPrimary: boolean
+  order: number
+  uploadedAt: string
 }
 
 export interface PropertyMetadata {

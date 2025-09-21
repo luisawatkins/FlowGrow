@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Property } from '@/types'
 import { getFlowExplorerAddressUrl } from '@/lib/contracts'
 import { SearchResult } from '@/lib/searchUtils'
+import { OptimizedImage } from './OptimizedImage'
 
 interface PropertyCardProps {
   property: Property
@@ -49,12 +50,22 @@ export function PropertyCard({
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-      <div className="h-48 bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center relative">
-        {property.imageUrl ? (
-          <img 
-            src={property.imageUrl} 
+      <div className="h-48 bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center relative overflow-hidden">
+        {property.images && property.images.length > 0 ? (
+          <OptimizedImage
+            src={property.images.find(img => img.isPrimary)?.url || property.images[0].url}
             alt={property.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full"
+            width={400}
+            height={192}
+          />
+        ) : property.imageUrl ? (
+          <OptimizedImage
+            src={property.imageUrl}
+            alt={property.name}
+            className="w-full h-full"
+            width={400}
+            height={192}
           />
         ) : (
           <div className="text-6xl text-blue-300">🏠</div>
@@ -62,6 +73,11 @@ export function PropertyCard({
         {property.isListed && (
           <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium">
             For Sale
+          </div>
+        )}
+        {property.images && property.images.length > 1 && (
+          <div className="absolute bottom-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-xs">
+            +{property.images.length - 1} more
           </div>
         )}
       </div>
