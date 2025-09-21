@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/Button'
 import { Property } from '@/types'
 import { getFlowExplorerAddressUrl } from '@/lib/contracts'
+import { SearchResult } from '@/lib/searchUtils'
 
 interface PropertyCardProps {
   property: Property
@@ -11,6 +12,8 @@ interface PropertyCardProps {
   onView?: (property: Property) => void
   isBuying?: boolean
   currentUser?: string | null
+  searchResult?: SearchResult
+  showHighlights?: boolean
 }
 
 export function PropertyCard({ 
@@ -18,10 +21,31 @@ export function PropertyCard({
   onBuy, 
   onView, 
   isBuying = false, 
-  currentUser 
+  currentUser,
+  searchResult,
+  showHighlights = false
 }: PropertyCardProps) {
   const isOwner = currentUser === property.owner
   const canBuy = !isOwner && property.isListed && !isBuying
+
+  // Helper function to highlight search terms
+  const highlightText = (text: string, highlights: string[] = []) => {
+    if (!showHighlights || !highlights.length) {
+      return text
+    }
+
+    let highlightedText = text
+    highlights.forEach(term => {
+      const regex = new RegExp(`(${term})`, 'gi')
+      highlightedText = highlightedText.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>')
+    })
+    
+    return highlightedText
+  }
+
+  const nameHighlights = searchResult?.highlights.name || []
+  const descHighlights = searchResult?.highlights.description || []
+  const addrHighlights = searchResult?.highlights.address || []
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow">
@@ -43,19 +67,31 @@ export function PropertyCard({
       </div>
       
       <CardHeader>
-        <CardTitle className="text-xl line-clamp-1">{property.name}</CardTitle>
-        <CardDescription className="line-clamp-2">
-          {property.description}
-        </CardDescription>
+        <CardTitle 
+          className="text-xl line-clamp-1"
+          dangerouslySetInnerHTML={{ 
+            __html: highlightText(property.name, nameHighlights) 
+          }}
+        />
+        <CardDescription 
+          className="line-clamp-2"
+          dangerouslySetInnerHTML={{ 
+            __html: highlightText(property.description, descHighlights) 
+          }}
+        />
       </CardHeader>
       
       <CardContent className="space-y-4">
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Address:</span>
-            <span className="font-medium text-right max-w-[200px] truncate" title={property.address}>
-              {property.address}
-            </span>
+            <span 
+              className="font-medium text-right max-w-[200px] truncate" 
+              title={property.address}
+              dangerouslySetInnerHTML={{ 
+                __html: highlightText(property.address, addrHighlights) 
+              }}
+            />
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Square Feet:</span>

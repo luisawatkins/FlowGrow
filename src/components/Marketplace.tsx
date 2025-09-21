@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { PropertyCard } from '@/components/PropertyCard'
 import { PropertyModal } from '@/components/PropertyModal'
+import { FilterBar, usePropertyFilters, FilterOptions } from '@/components/FilterBar'
 import { useWallet } from '@/hooks/useWallet'
 import { ContractService } from '@/lib/contracts'
 import { Property } from '@/types'
+import { filterProperties, getFilterSummary } from '@/lib/searchUtils'
 
 export function Marketplace() {
   const { provider, signer, address } = useWallet()
@@ -16,8 +18,9 @@ export function Marketplace() {
   const [error, setError] = useState<string | null>(null)
   const [buyingProperty, setBuyingProperty] = useState<string | null>(null)
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortBy, setSortBy] = useState<'price' | 'name' | 'date'>('date')
+  
+  // Use the new filter system
+  const { filters, updateFilters, clearFilters } = usePropertyFilters()
 
   // Mock data for demonstration
   useEffect(() => {
@@ -104,23 +107,9 @@ export function Marketplace() {
     setSelectedProperty(property)
   }
 
-  const filteredAndSortedProperties = properties
-    .filter(property => 
-      property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.description.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'price':
-          return parseFloat(a.price) - parseFloat(b.price)
-        case 'name':
-          return a.name.localeCompare(b.name)
-        case 'date':
-        default:
-          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-      }
-    })
+  // Use the new filtering system
+  const searchResults = filterProperties(properties, filters)
+  const filterSummary = getFilterSummary(filters)
 
   if (loading) {
     return (
@@ -148,57 +137,73 @@ export function Marketplace() {
         <p className="text-gray-600">Browse and purchase property NFTs</p>
       </div>
 
-      {/* Search and Filter Controls */}
-      <Card className="mb-6">
-        <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Search properties..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex gap-2">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'price' | 'name' | 'date')}
-                className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="date">Sort by Date</option>
-                <option value="price">Sort by Price</option>
-                <option value="name">Sort by Name</option>
-              </select>
+      {/* Enhanced Search and Filter Controls */}
+      <FilterBar
+        filters={filters}
+        onFiltersChange={updateFilters}
+        onClearFilters={clearFilters}
+        totalResults={searchResults.length}
+        properties={properties}
+        className="mb-6"
+      />
+
+      {/* Active Filters Summary */}
+      {filterSummary.length > 0 && (
+        <Card className="mb-4">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">Active filters:</span>
+              {filterSummary.map((filter, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                >
+                  {filter}
+                </span>
+              ))}
               <Button
-                onClick={() => setProperties(prev => [...prev])}
-                variant="outline"
+                onClick={clearFilters}
+                variant="ghost"
                 size="sm"
+                className="text-red-600 hover:text-red-700"
               >
-                Refresh
+                Clear all
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {filteredAndSortedProperties.length === 0 ? (
+      {searchResults.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-gray-600">
-            {searchTerm ? 'No properties match your search' : 'No properties available for sale'}
+            {filters.searchTerm || filterSummary.length > 0 
+              ? 'No properties match your search criteria' 
+              : 'No properties available for sale'
+            }
           </p>
+          {(filters.searchTerm || filterSummary.length > 0) && (
+            <Button
+              onClick={clearFilters}
+              variant="outline"
+              className="mt-4"
+            >
+              Clear all filters
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAndSortedProperties.map((property) => (
+          {searchResults.map((searchResult) => (
             <PropertyCard
-              key={property.id}
-              property={property}
+              key={searchResult.property.id}
+              property={searchResult.property}
               onBuy={handleBuyProperty}
               onView={handleViewProperty}
-              isBuying={buyingProperty === property.id}
+              isBuying={buyingProperty === searchResult.property.id}
               currentUser={address}
+              searchResult={searchResult}
+              showHighlights={!!filters.searchTerm}
             />
           ))}
         </div>
