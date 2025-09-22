@@ -111,6 +111,11 @@ export function Marketplace() {
   const searchResults = filterProperties(properties, filters)
   const filterSummary = getFilterSummary(filters)
 
+  const handleSearchPerformed = (query: string, resultCount: number) => {
+    // This will be called when a search is performed
+    console.log(`Search performed: "${query}" found ${resultCount} results`)
+  }
+
   if (loading) {
     return (
       <div className="text-center py-20">
@@ -144,6 +149,7 @@ export function Marketplace() {
         onClearFilters={clearFilters}
         totalResults={searchResults.length}
         properties={properties}
+        onSearchPerformed={handleSearchPerformed}
         className="mb-6"
       />
 

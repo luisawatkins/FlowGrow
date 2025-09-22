@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { SearchInputWithSuggestions } from './SearchSuggestions'
 import { Property } from '@/types'
+import { saveSearchHistory, getSearchHistory, getSavedSearches, saveSearch, deleteSavedSearch, useSavedSearch } from '@/lib/searchUtils'
 
 export interface FilterOptions {
   searchTerm: string
@@ -31,6 +32,7 @@ interface FilterBarProps {
   totalResults: number
   properties: Property[]
   className?: string
+  onSearchPerformed?: (query: string, resultCount: number) => void
 }
 
 const DEFAULT_FILTERS: FilterOptions = {
@@ -50,10 +52,13 @@ export function FilterBar({
   onClearFilters, 
   totalResults,
   properties,
-  className = '' 
+  className = '',
+  onSearchPerformed
 }: FilterBarProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [localFilters, setLocalFilters] = useState<FilterOptions>(filters)
+  const [savedSearches, setSavedSearches] = useState(getSavedSearches())
+  const [showSavedSearches, setShowSavedSearches] = useState(false)
 
   const updateFilter = useCallback((key: keyof FilterOptions, value: any) => {
     const newFilters = { ...localFilters, [key]: value }
@@ -64,6 +69,14 @@ export function FilterBar({
   const handleSearchChange = useCallback((value: string) => {
     updateFilter('searchTerm', value)
   }, [updateFilter])
+
+  const handleSearchPerformed = useCallback((query: string) => {
+    if (query.trim() && onSearchPerformed) {
+      onSearchPerformed(query, totalResults)
+      // Save to search history
+      saveSearchHistory(query, localFilters, totalResults)
+    }
+  }, [localFilters, totalResults, onSearchPerformed])
 
   const handlePriceRangeChange = useCallback((field: 'min' | 'max', value: number) => {
     updateFilter('priceRange', { ...localFilters.priceRange, [field]: value })
@@ -77,6 +90,33 @@ export function FilterBar({
     setLocalFilters(DEFAULT_FILTERS)
     onClearFilters()
   }, [onClearFilters])
+
+  const handleSaveSearch = useCallback(() => {
+    const searchName = prompt('Enter a name for this search:')
+    if (searchName && searchName.trim()) {
+      try {
+        saveSearch(searchName.trim(), localFilters.searchTerm, localFilters)
+        setSavedSearches(getSavedSearches())
+        alert('Search saved successfully!')
+      } catch (error) {
+        alert('Failed to save search. Please try again.')
+      }
+    }
+  }, [localFilters])
+
+  const handleLoadSavedSearch = useCallback((savedSearch: any) => {
+    setLocalFilters(savedSearch.filters)
+    onFiltersChange(savedSearch.filters)
+    useSavedSearch(savedSearch.id)
+    setShowSavedSearches(false)
+  }, [onFiltersChange])
+
+  const handleDeleteSavedSearch = useCallback((searchId: string) => {
+    if (confirm('Are you sure you want to delete this saved search?')) {
+      deleteSavedSearch(searchId)
+      setSavedSearches(getSavedSearches())
+    }
+  }, [])
 
   const hasActiveFilters = Object.keys(filters).some(key => {
     const value = filters[key as keyof FilterOptions]
@@ -97,6 +137,7 @@ export function FilterBar({
             <SearchInputWithSuggestions
               value={localFilters.searchTerm}
               onChange={handleSearchChange}
+              onSearch={handleSearchPerformed}
               placeholder="Search by name, location, or description..."
               properties={properties}
               className="w-full"
@@ -128,6 +169,13 @@ export function FilterBar({
             >
               {isExpanded ? 'Hide' : 'Show'} Filters
             </Button>
+            <Button
+              onClick={() => setShowSavedSearches(!showSavedSearches)}
+              variant="outline"
+              size="sm"
+            >
+              Saved Searches
+            </Button>
             {hasActiveFilters && (
               <Button
                 onClick={handleClearFilters}
@@ -140,6 +188,56 @@ export function FilterBar({
             )}
           </div>
         </div>
+
+        {/* Saved Searches Dropdown */}
+        {showSavedSearches && (
+          <div className="mb-4 p-4 bg-gray-50 rounded-md">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-medium text-gray-700">Saved Searches</h3>
+              <Button
+                onClick={handleSaveSearch}
+                variant="outline"
+                size="sm"
+                disabled={!localFilters.searchTerm && !hasActiveFilters}
+              >
+                Save Current Search
+              </Button>
+            </div>
+            {savedSearches.length === 0 ? (
+              <p className="text-sm text-gray-500">No saved searches yet</p>
+            ) : (
+              <div className="space-y-2">
+                {savedSearches.map((search) => (
+                  <div key={search.id} className="flex justify-between items-center p-2 bg-white rounded border">
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">{search.name}</div>
+                      <div className="text-xs text-gray-500">
+                        {search.query} • Used {search.useCount} times
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() => handleLoadSavedSearch(search)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Load
+                      </Button>
+                      <Button
+                        onClick={() => handleDeleteSavedSearch(search.id)}
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Results Count */}
         <div className="text-sm text-gray-600 mb-4">
