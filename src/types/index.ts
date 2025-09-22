@@ -140,3 +140,56 @@ export interface UserActivity {
   metadata?: Record<string, any>
   timestamp: string
 }
+
+export interface Notification {
+  id: string
+  userId: string
+  type: NotificationType
+  title: string
+  message: string
+  priority: NotificationPriority
+  isRead: boolean
+  actionUrl?: string
+  metadata?: Record<string, any>
+  createdAt: string
+}
+
+export type NotificationType = 
+  | 'property_update'
+  | 'offer_received'
+  | 'offer_accepted'
+  | 'message_received'
+  | 'price_change'
+  | 'favorite_update'
+  | 'system'
+
+export type NotificationPriority = 'low' | 'medium' | 'high'
+
+export interface Message {
+  id: string
+  conversationId: string
+  senderId: string
+  content: string
+  type: MessageType
+  isRead: boolean
+  createdAt: string
+}
+
+export type MessageType = 'text' | 'image' | 'file' | 'system'
+
+export interface Conversation {
+  id: string
+  participants: Participant[]
+  title: string
+  lastMessage?: Message
+  unreadCount?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Participant {
+  id: string
+  name: string
+  avatar?: string
+  isOnline: boolean
+}
