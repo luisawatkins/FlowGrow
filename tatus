@@ -1,0 +1,3 @@
+[33meaf6946[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m test: add comprehensive testing suite and Jest configuration
+[33ma5b2ac2[m feat: enhance search components with advanced filtering and suggestions
+[33m9d7a7fa[m feat: add debounced search input and enhanced search utilities
