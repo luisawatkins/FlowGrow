@@ -1,6 +1,25 @@
 import { Property } from '@/types'
 import { FilterOptions } from '@/components/FilterBar'
 
+// Search history management
+export interface SearchHistoryItem {
+  id: string
+  query: string
+  filters: FilterOptions
+  timestamp: number
+  resultCount: number
+}
+
+export interface SavedSearch {
+  id: string
+  name: string
+  query: string
+  filters: FilterOptions
+  createdAt: number
+  lastUsed: number
+  useCount: number
+}
+
 export interface SearchResult {
   property: Property
   score: number
@@ -209,31 +228,238 @@ export function getFilterSummary(filters: FilterOptions): string[] {
   return summary
 }
 
-// Search suggestions based on property data
-export function getSearchSuggestions(properties: Property[], query: string): string[] {
-  if (!query.trim() || query.length < 2) return []
+// Search history management
+const SEARCH_HISTORY_KEY = 'flowgrow_search_history'
+const SAVED_SEARCHES_KEY = 'flowgrow_saved_searches'
+const MAX_HISTORY_ITEMS = 20
+
+export function saveSearchHistory(query: string, filters: FilterOptions, resultCount: number): void {
+  if (!query.trim()) return
+
+  const history = getSearchHistory()
+  const newItem: SearchHistoryItem = {
+    id: Date.now().toString(),
+    query,
+    filters: { ...filters },
+    timestamp: Date.now(),
+    resultCount
+  }
+
+  // Remove duplicate if exists
+  const filteredHistory = history.filter(item => 
+    item.query !== query || JSON.stringify(item.filters) !== JSON.stringify(filters)
+  )
+
+  // Add new item and limit to max items
+  const updatedHistory = [newItem, ...filteredHistory].slice(0, MAX_HISTORY_ITEMS)
   
-  const suggestions = new Set<string>()
+  try {
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updatedHistory))
+  } catch (error) {
+    console.warn('Failed to save search history:', error)
+  }
+}
+
+export function getSearchHistory(): SearchHistoryItem[] {
+  try {
+    const stored = localStorage.getItem(SEARCH_HISTORY_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch (error) {
+    console.warn('Failed to load search history:', error)
+    return []
+  }
+}
+
+export function clearSearchHistory(): void {
+  try {
+    localStorage.removeItem(SEARCH_HISTORY_KEY)
+  } catch (error) {
+    console.warn('Failed to clear search history:', error)
+  }
+}
+
+export function saveSearch(name: string, query: string, filters: FilterOptions): string {
+  const savedSearches = getSavedSearches()
+  const newSearch: SavedSearch = {
+    id: Date.now().toString(),
+    name,
+    query,
+    filters: { ...filters },
+    createdAt: Date.now(),
+    lastUsed: Date.now(),
+    useCount: 1
+  }
+
+  const updatedSearches = [...savedSearches, newSearch]
+  
+  try {
+    localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(updatedSearches))
+    return newSearch.id
+  } catch (error) {
+    console.warn('Failed to save search:', error)
+    throw error
+  }
+}
+
+export function getSavedSearches(): SavedSearch[] {
+  try {
+    const stored = localStorage.getItem(SAVED_SEARCHES_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch (error) {
+    console.warn('Failed to load saved searches:', error)
+    return []
+  }
+}
+
+export function updateSavedSearch(id: string, updates: Partial<SavedSearch>): void {
+  const savedSearches = getSavedSearches()
+  const updatedSearches = savedSearches.map(search => 
+    search.id === id ? { ...search, ...updates } : search
+  )
+  
+  try {
+    localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(updatedSearches))
+  } catch (error) {
+    console.warn('Failed to update saved search:', error)
+  }
+}
+
+export function deleteSavedSearch(id: string): void {
+  const savedSearches = getSavedSearches()
+  const updatedSearches = savedSearches.filter(search => search.id !== id)
+  
+  try {
+    localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(updatedSearches))
+  } catch (error) {
+    console.warn('Failed to delete saved search:', error)
+  }
+}
+
+export function useSavedSearch(id: string): void {
+  updateSavedSearch(id, {
+    lastUsed: Date.now(),
+    useCount: (getSavedSearches().find(s => s.id === id)?.useCount || 0) + 1
+  })
+}
+
+// Enhanced search suggestions with categories
+export interface SearchSuggestion {
+  text: string
+  type: 'property' | 'location' | 'type' | 'recent' | 'saved'
+  category?: string
+}
+
+export function getEnhancedSearchSuggestions(
+  properties: Property[], 
+  query: string,
+  includeHistory: boolean = true,
+  includeSaved: boolean = true
+): SearchSuggestion[] {
+  if (!query.trim() || query.length < 2) {
+    // Return recent searches and saved searches when no query
+    const suggestions: SearchSuggestion[] = []
+    
+    if (includeHistory) {
+      const recentSearches = getSearchHistory().slice(0, 3)
+      suggestions.push(...recentSearches.map(item => ({
+        text: item.query,
+        type: 'recent' as const,
+        category: 'Recent Searches'
+      })))
+    }
+    
+    if (includeSaved) {
+      const savedSearches = getSavedSearches().slice(0, 3)
+      suggestions.push(...savedSearches.map(search => ({
+        text: search.name,
+        type: 'saved' as const,
+        category: 'Saved Searches'
+      })))
+    }
+    
+    return suggestions
+  }
+
+  const suggestions: SearchSuggestion[] = []
   const queryLower = query.toLowerCase()
-  
+
+  // Property name suggestions
   properties.forEach(property => {
-    // Add property names that match
     if (property.name.toLowerCase().includes(queryLower)) {
-      suggestions.add(property.name)
-    }
-    
-    // Add locations that match
-    const location = extractLocation(property.address)
-    if (location.toLowerCase().includes(queryLower)) {
-      suggestions.add(location)
-    }
-    
-    // Add property types that match
-    const propertyType = classifyPropertyType(property)
-    if (propertyType.includes(queryLower)) {
-      suggestions.add(propertyType)
+      suggestions.push({
+        text: property.name,
+        type: 'property',
+        category: 'Properties'
+      })
     }
   })
-  
-  return Array.from(suggestions).slice(0, 5) // Limit to 5 suggestions
+
+  // Location suggestions
+  const locations = new Set<string>()
+  properties.forEach(property => {
+    const location = extractLocation(property.address)
+    if (location.toLowerCase().includes(queryLower)) {
+      locations.add(location)
+    }
+  })
+  suggestions.push(...Array.from(locations).map(location => ({
+    text: location,
+    type: 'location',
+    category: 'Locations'
+  })))
+
+  // Property type suggestions
+  const types = new Set<string>()
+  properties.forEach(property => {
+    const propertyType = classifyPropertyType(property)
+    if (propertyType.includes(queryLower)) {
+      types.add(propertyType)
+    }
+  })
+  suggestions.push(...Array.from(types).map(type => ({
+    text: type,
+    type: 'type',
+    category: 'Property Types'
+  })))
+
+  // Recent searches that match
+  if (includeHistory) {
+    const recentSearches = getSearchHistory()
+    recentSearches.forEach(item => {
+      if (item.query.toLowerCase().includes(queryLower)) {
+        suggestions.push({
+          text: item.query,
+          type: 'recent',
+          category: 'Recent Searches'
+        })
+      }
+    })
+  }
+
+  // Saved searches that match
+  if (includeSaved) {
+    const savedSearches = getSavedSearches()
+    savedSearches.forEach(search => {
+      if (search.name.toLowerCase().includes(queryLower) || 
+          search.query.toLowerCase().includes(queryLower)) {
+        suggestions.push({
+          text: search.name,
+          type: 'saved',
+          category: 'Saved Searches'
+        })
+      }
+    })
+  }
+
+  // Remove duplicates and limit results
+  const uniqueSuggestions = suggestions.filter((suggestion, index, self) => 
+    index === self.findIndex(s => s.text === suggestion.text)
+  )
+
+  return uniqueSuggestions.slice(0, 8)
+}
+
+// Legacy function for backward compatibility
+export function getSearchSuggestions(properties: Property[], query: string): string[] {
+  return getEnhancedSearchSuggestions(properties, query).map(s => s.text)
 }
