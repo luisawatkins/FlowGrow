@@ -7,6 +7,66 @@ import FlowToken from 0x7e60df042a9c0868
 /// This contract manages property NFTs on Flow blockchain
 pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
     
+    // Location Data Structure
+    pub struct LocationData {
+        pub let city: String
+        pub let state: String
+        pub let country: String
+        pub let coordinates: Coordinates?
+        pub let zipCode: String?
+        
+        init(
+            city: String,
+            state: String,
+            country: String,
+            coordinates: Coordinates?,
+            zipCode: String?
+        ) {
+            self.city = city
+            self.state = state
+            self.country = country
+            self.coordinates = coordinates
+            self.zipCode = zipCode
+        }
+    }
+    
+    // Coordinates Structure
+    pub struct Coordinates {
+        pub let latitude: UFix64
+        pub let longitude: UFix64
+        
+        init(latitude: UFix64, longitude: UFix64) {
+            self.latitude = latitude
+            self.longitude = longitude
+        }
+    }
+    
+    // Transaction Record Structure
+    pub struct TransactionRecord {
+        pub let transactionType: String
+        pub let from: Address?
+        pub let to: Address?
+        pub let price: UFix64?
+        pub let timestamp: UFix64
+        pub let transactionHash: String?
+        
+        init(
+            transactionType: String,
+            from: Address?,
+            to: Address?,
+            price: UFix64?,
+            timestamp: UFix64,
+            transactionHash: String?
+        ) {
+            self.transactionType = transactionType
+            self.from = from
+            self.to = to
+            self.price = price
+            self.timestamp = timestamp
+            self.transactionHash = transactionHash
+        }
+    }
+    
     // NFT Collection Resource
     pub resource NFT: NonFungibleToken.INFT, MetadataViews.Resolver {
         pub let id: UInt64
@@ -20,6 +80,19 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
         pub let createdAt: UFix64
         pub let imageURL: String?
         
+        // Enhanced property attributes
+        pub let bedrooms: UInt32?
+        pub let bathrooms: UInt32?
+        pub let yearBuilt: UInt32?
+        pub let propertyType: String
+        pub let features: [String]
+        pub let amenities: [String]
+        pub let location: LocationData
+        pub let transactionHistory: [TransactionRecord]
+        pub let isVerified: Bool
+        pub let verificationDate: UFix64?
+        pub let lastUpdated: UFix64
+        
         init(
             id: UInt64,
             name: String,
@@ -28,7 +101,14 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
             squareFootage: UInt32,
             price: UFix64,
             owner: Address,
-            imageURL: String?
+            imageURL: String?,
+            bedrooms: UInt32?,
+            bathrooms: UInt32?,
+            yearBuilt: UInt32?,
+            propertyType: String,
+            features: [String],
+            amenities: [String],
+            location: LocationData
         ) {
             self.id = id
             self.name = name
@@ -40,6 +120,17 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
             self.isListed = false
             self.createdAt = getCurrentBlock().timestamp
             self.imageURL = imageURL
+            self.bedrooms = bedrooms
+            self.bathrooms = bathrooms
+            self.yearBuilt = yearBuilt
+            self.propertyType = propertyType
+            self.features = features
+            self.amenities = amenities
+            self.location = location
+            self.transactionHistory = []
+            self.isVerified = false
+            self.verificationDate = nil
+            self.lastUpdated = getCurrentBlock().timestamp
         }
         
         // Metadata Views
@@ -67,7 +158,7 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
                         ) : nil
                     )
                 case Type<MetadataViews.Traits>():
-                    return [
+                    var traits: [MetadataViews.Trait] = [
                         MetadataViews.Trait(
                             name: "Physical Address",
                             value: self.physicalAddress
@@ -91,8 +182,62 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
                         MetadataViews.Trait(
                             name: "Created At",
                             value: self.createdAt
+                        ),
+                        MetadataViews.Trait(
+                            name: "Property Type",
+                            value: self.propertyType
+                        ),
+                        MetadataViews.Trait(
+                            name: "City",
+                            value: self.location.city
+                        ),
+                        MetadataViews.Trait(
+                            name: "State",
+                            value: self.location.state
+                        ),
+                        MetadataViews.Trait(
+                            name: "Country",
+                            value: self.location.country
+                        ),
+                        MetadataViews.Trait(
+                            name: "Is Verified",
+                            value: self.isVerified
                         )
                     ]
+                    
+                    if self.bedrooms != nil {
+                        traits.append(MetadataViews.Trait(
+                            name: "Bedrooms",
+                            value: self.bedrooms!
+                        ))
+                    }
+                    
+                    if self.bathrooms != nil {
+                        traits.append(MetadataViews.Trait(
+                            name: "Bathrooms",
+                            value: self.bathrooms!
+                        ))
+                    }
+                    
+                    if self.yearBuilt != nil {
+                        traits.append(MetadataViews.Trait(
+                            name: "Year Built",
+                            value: self.yearBuilt!
+                        ))
+                    }
+                    
+                    if self.location.coordinates != nil {
+                        traits.append(MetadataViews.Trait(
+                            name: "Latitude",
+                            value: self.location.coordinates!.latitude
+                        ))
+                        traits.append(MetadataViews.Trait(
+                            name: "Longitude",
+                            value: self.location.coordinates!.longitude
+                        ))
+                    }
+                    
+                    return traits
                 case Type<MetadataViews.Media>():
                     if self.imageURL != nil {
                         return [
@@ -166,6 +311,43 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
         pub fun getViewResolver(id: UInt64): &MetadataViews.Resolver {
             return &self.ownedNFTs[id] as &MetadataViews.Resolver
         }
+        
+        // Enhanced property management functions
+        pub fun updatePropertyPrice(id: UInt64, newPrice: UFix64) {
+            if let nft = &self.ownedNFTs[id] as &NFT {
+                // This would require a mutable reference, which isn't available in Cadence
+                // In a real implementation, you'd need to restructure the contract
+                // For now, we'll add this as a placeholder for future enhancement
+            }
+        }
+        
+        pub fun getPropertyDetails(id: UInt64): &NFT? {
+            return &self.ownedNFTs[id] as &NFT?
+        }
+        
+        pub fun searchPropertiesByType(propertyType: String): [UInt64] {
+            let matchingIDs: [UInt64] = []
+            for id in self.ownedNFTs.keys {
+                if let nft = &self.ownedNFTs[id] as &NFT {
+                    if nft.propertyType == propertyType {
+                        matchingIDs.append(id)
+                    }
+                }
+            }
+            return matchingIDs
+        }
+        
+        pub fun searchPropertiesByLocation(city: String): [UInt64] {
+            let matchingIDs: [UInt64] = []
+            for id in self.ownedNFTs.keys {
+                if let nft = &self.ownedNFTs[id] as &NFT {
+                    if nft.location.city == city {
+                        matchingIDs.append(id)
+                    }
+                }
+            }
+            return matchingIDs
+        }
     }
     
     // Collection Factory
@@ -186,7 +368,7 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
         self.collection = &collection as &Collection
     }
     
-    // Mint Function
+    // Enhanced Mint Function
     pub fun mintProperty(
         name: String,
         description: String,
@@ -194,7 +376,14 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
         squareFootage: UInt32,
         price: UFix64,
         owner: Address,
-        imageURL: String?
+        imageURL: String?,
+        bedrooms: UInt32?,
+        bathrooms: UInt32?,
+        yearBuilt: UInt32?,
+        propertyType: String,
+        features: [String],
+        amenities: [String],
+        location: LocationData
     ): @NFT {
         let nft <- create NFT(
             id: self.nextTokenID,
@@ -204,13 +393,83 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
             squareFootage: squareFootage,
             price: price,
             owner: owner,
-            imageURL: imageURL
+            imageURL: imageURL,
+            bedrooms: bedrooms,
+            bathrooms: bathrooms,
+            yearBuilt: yearBuilt,
+            propertyType: propertyType,
+            features: features,
+            amenities: amenities,
+            location: location
         )
         
         self.nextTokenID = self.nextTokenID + 1
         self.totalSupply = self.totalSupply + 1
         
+        emit PropertyMinted(
+            id: nft.id,
+            name: name,
+            owner: owner,
+            propertyType: propertyType,
+            location: location
+        )
+        
         return <-nft
+    }
+    
+    // Verification function (admin only)
+    pub fun verifyProperty(propertyID: UInt64, verifier: Address) {
+        // In a real implementation, you'd need admin controls
+        // This is a placeholder for property verification functionality
+        emit PropertyVerified(propertyID: propertyID, verifier: verifier)
+    }
+    
+    // Search functions
+    pub fun searchProperties(
+        propertyType: String?,
+        city: String?,
+        minPrice: UFix64?,
+        maxPrice: UFix64?,
+        minSquareFootage: UInt32?,
+        maxSquareFootage: UInt32?
+    ): [UInt64] {
+        let matchingIDs: [UInt64] = []
+        
+        for id in self.collection!.ownedNFTs.keys {
+            if let nft = &self.collection!.ownedNFTs[id] as &NFT {
+                var matches = true
+                
+                if propertyType != nil && nft.propertyType != propertyType! {
+                    matches = false
+                }
+                
+                if city != nil && nft.location.city != city! {
+                    matches = false
+                }
+                
+                if minPrice != nil && nft.price < minPrice! {
+                    matches = false
+                }
+                
+                if maxPrice != nil && nft.price > maxPrice! {
+                    matches = false
+                }
+                
+                if minSquareFootage != nil && nft.squareFootage < minSquareFootage! {
+                    matches = false
+                }
+                
+                if maxSquareFootage != nil && nft.squareFootage > maxSquareFootage! {
+                    matches = false
+                }
+                
+                if matches {
+                    matchingIDs.append(id)
+                }
+            }
+        }
+        
+        return matchingIDs
     }
     
     // Get Total Supply
@@ -222,4 +481,25 @@ pub contract PropertyNFT: NonFungibleToken, MetadataViews.Resolver {
     pub fun getCollection(): &Collection {
         return self.collection ?? panic("Collection not initialized")
     }
+    
+    // Events
+    pub event PropertyMinted(
+        id: UInt64,
+        name: String,
+        owner: Address,
+        propertyType: String,
+        location: LocationData
+    )
+    
+    pub event PropertyVerified(
+        propertyID: UInt64,
+        verifier: Address
+    )
+    
+    pub event PropertyUpdated(
+        propertyID: UInt64,
+        field: String,
+        oldValue: String,
+        newValue: String
+    )
 }
