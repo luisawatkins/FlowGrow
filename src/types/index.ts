@@ -193,3 +193,76 @@ export interface Participant {
   avatar?: string
   isOnline: boolean
 }
+
+export interface PropertyAnalytics {
+  totalProperties: number
+  totalViews: number
+  totalSales: number
+  totalSalesValue: number
+  newPropertiesThisMonth: number
+  viewsGrowth: number
+  topProperties: TopProperty[]
+  averagePrice: number
+  averageDaysOnMarket: number
+  conversionRate: number
+}
+
+export interface TopProperty {
+  id: string
+  name: string
+  location: string
+  views: number
+  inquiries: number
+  price: number
+  status: 'active' | 'sold' | 'pending'
+  engagement: number
+}
+
+export interface UserAnalytics {
+  totalUsers: number
+  activeUsers: number
+  newUsersThisMonth: number
+  userGrowth: number
+  averageSessionDuration: number
+  topUsers: TopUser[]
+  userEngagement: number
+}
+
+export interface TopUser {
+  id: string
+  name: string
+  propertiesListed: number
+  propertiesSold: number
+  totalValue: number
+  rating: number
+}
+
+export interface MarketAnalytics {
+  averagePrice: number
+  priceGrowth: number
+  averageDaysOnMarket: number
+  daysOnMarketChange: number
+  salesVolume: number
+  volumeGrowth: number
+  marketTrends: MarketTrend[]
+  popularLocations: PopularLocation[]
+  priceRanges: PriceRange[]
+}
+
+export interface MarketTrend {
+  month: string
+  price: number
+  volume: number
+}
+
+export interface PopularLocation {
+  location: string
+  properties: number
+  averagePrice: number
+}
+
+export interface PriceRange {
+  range: string
+  count: number
+  percentage: number
+}
