@@ -1,333 +1,396 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Agent, Brokerage, Commission, AgentClient, AgentPerformance, AgentSearchFilters, AgentMatch, AgentReview, AgentLead, AgentDashboard } from '@/types/agent';
-import { AgentService } from '@/lib/agentService';
+import { useState, useCallback, useEffect } from 'react'
+import { Agent, Brokerage, AgentClient, Commission, AgentReview, AgentSearchFilters, AgentMatchingCriteria } from '../types/agent'
+import { AgentService } from '../lib/agentService'
+import { CommissionCalculator, CommissionCalculation } from '../lib/commissionCalculator'
 
-export interface UseAgentReturn {
-  // Agent data
-  agents: Agent[];
-  selectedAgent: Agent | null;
-  loading: boolean;
-  error: string | null;
-  
-  // Brokerage data
-  brokerages: Brokerage[];
-  selectedBrokerage: Brokerage | null;
-  
-  // Commission data
-  commissions: Commission[];
-  commissionLoading: boolean;
-  
-  // Performance data
-  performance: AgentPerformance | null;
-  performanceLoading: boolean;
-  
-  // Dashboard data
-  dashboard: AgentDashboard | null;
-  dashboardLoading: boolean;
-  
-  // Search and filters
-  searchFilters: AgentSearchFilters;
-  searchResults: Agent[];
-  searchLoading: boolean;
-  
-  // Matching
-  agentMatches: AgentMatch[];
-  matchingLoading: boolean;
-  
-  // Actions
-  loadAgents: (filters?: AgentSearchFilters) => Promise<void>;
-  selectAgent: (agentId: string) => Promise<void>;
-  createAgent: (agentData: Partial<Agent>) => Promise<Agent | null>;
-  updateAgent: (agentId: string, updates: Partial<Agent>) => Promise<boolean>;
-  verifyAgent: (agentId: string, verificationData: any) => Promise<boolean>;
-  loadBrokerages: () => Promise<void>;
-  selectBrokerage: (brokerageId: string) => Promise<void>;
-  loadCommissions: (agentId: string) => Promise<void>;
-  loadPerformance: (agentId: string, period?: string) => Promise<void>;
-  loadDashboard: (agentId: string) => Promise<void>;
-  searchAgents: (filters: AgentSearchFilters) => Promise<void>;
-  findMatchingAgents: (preferences: any) => Promise<void>;
-  clearError: () => void;
+interface AgentState {
+  agent: Agent | null
+  brokerage: Brokerage | null
+  clients: AgentClient[]
+  commissions: Commission[]
+  reviews: AgentReview[]
+  isLoading: boolean
+  error: string | null
 }
 
-export const useAgent = (): UseAgentReturn => {
-  // State management
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [brokerages, setBrokerages] = useState<Brokerage[]>([]);
-  const [selectedBrokerage, setSelectedBrokerage] = useState<Brokerage | null>(null);
-  
-  const [commissions, setCommissions] = useState<Commission[]>([]);
-  const [commissionLoading, setCommissionLoading] = useState(false);
-  
-  const [performance, setPerformance] = useState<AgentPerformance | null>(null);
-  const [performanceLoading, setPerformanceLoading] = useState(false);
-  
-  const [dashboard, setDashboard] = useState<AgentDashboard | null>(null);
-  const [dashboardLoading, setDashboardLoading] = useState(false);
-  
-  const [searchFilters, setSearchFilters] = useState<AgentSearchFilters>({});
-  const [searchResults, setSearchResults] = useState<Agent[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  
-  const [agentMatches, setAgentMatches] = useState<AgentMatch[]>([]);
-  const [matchingLoading, setMatchingLoading] = useState(false);
+interface AgentSearchState {
+  agents: Agent[]
+  totalCount: number
+  isLoading: boolean
+  error: string | null
+  filters: AgentSearchFilters
+}
 
-  // Error handling
-  const handleError = useCallback((err: any) => {
-    console.error('Agent service error:', err);
-    setError(err.message || 'An error occurred');
-  }, []);
+interface AgentAnalytics {
+  totalCommission: number
+  averageRating: number
+  totalReviews: number
+  totalClients: number
+  activeClients: number
+  pendingCommissions: number
+  paidCommissions: number
+  monthlyProjections: any
+  yearlySummary: any
+  goalPerformance: any
+}
 
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
+export function useAgent(agentId?: string) {
+  const [state, setState] = useState<AgentState>({
+    agent: null,
+    brokerage: null,
+    clients: [],
+    commissions: [],
+    reviews: [],
+    isLoading: true,
+    error: null,
+  })
 
-  // Load agents
-  const loadAgents = useCallback(async (filters?: AgentSearchFilters) => {
+  // Load agent data
+  const loadAgent = useCallback(async (id: string) => {
     try {
-      setLoading(true);
-      setError(null);
-      const agentList = await AgentService.getAgents(filters);
-      setAgents(agentList);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [handleError]);
+      setState(prev => ({ ...prev, isLoading: true, error: null }))
+      
+      const [agent, brokerage, clients, commissions, reviews] = await Promise.all([
+        AgentService.getAgent(id),
+        AgentService.getAgent(id).then(agent => 
+          agent ? AgentService.getBrokerage(agent.brokerageId) : null
+        ),
+        AgentService.getAgentClients(id),
+        AgentService.getAgentCommissions(id),
+        AgentService.getAgentReviews(id),
+      ])
 
-  // Select agent
-  const selectAgent = useCallback(async (agentId: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const agent = await AgentService.getAgentById(agentId);
-      setSelectedAgent(agent);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setLoading(false);
+      setState({
+        agent,
+        brokerage,
+        clients: clients || [],
+        commissions: commissions || [],
+        reviews: reviews || [],
+        isLoading: false,
+        error: null,
+      })
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to load agent',
+        isLoading: false,
+      }))
     }
-  }, [handleError]);
-
-  // Create agent
-  const createAgent = useCallback(async (agentData: Partial<Agent>): Promise<Agent | null> => {
-    try {
-      setLoading(true);
-      setError(null);
-      const newAgent = await AgentService.createAgent(agentData);
-      setAgents(prev => [...prev, newAgent]);
-      return newAgent;
-    } catch (err) {
-      handleError(err);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [handleError]);
+  }, [])
 
   // Update agent
-  const updateAgent = useCallback(async (agentId: string, updates: Partial<Agent>): Promise<boolean> => {
-    try {
-      setLoading(true);
-      setError(null);
-      const updatedAgent = await AgentService.updateAgent(agentId, updates);
-      if (updatedAgent) {
-        setAgents(prev => prev.map(agent => 
-          agent.id === agentId ? updatedAgent : agent
-        ));
-        if (selectedAgent?.id === agentId) {
-          setSelectedAgent(updatedAgent);
-        }
-        return true;
-      }
-      return false;
-    } catch (err) {
-      handleError(err);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [handleError, selectedAgent]);
+  const updateAgent = useCallback(async (updates: Partial<Agent>) => {
+    if (!state.agent) return
 
-  // Verify agent
-  const verifyAgent = useCallback(async (agentId: string, verificationData: any): Promise<boolean> => {
     try {
-      setLoading(true);
-      setError(null);
-      const isVerified = await AgentService.verifyAgent(agentId, verificationData);
-      if (isVerified) {
-        // Update the agent in the list
-        setAgents(prev => prev.map(agent => 
-          agent.id === agentId ? { ...agent, isVerified: true } : agent
-        ));
-        if (selectedAgent?.id === agentId) {
-          setSelectedAgent(prev => prev ? { ...prev, isVerified: true } : null);
-        }
-      }
-      return isVerified;
-    } catch (err) {
-      handleError(err);
-      return false;
-    } finally {
-      setLoading(false);
+      const updatedAgent = await AgentService.updateAgent(state.agent.id, updates)
+      setState(prev => ({ ...prev, agent: updatedAgent }))
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to update agent',
+      }))
     }
-  }, [handleError, selectedAgent]);
+  }, [state.agent])
 
-  // Load brokerages
-  const loadBrokerages = useCallback(async () => {
+  // Add client
+  const addClient = useCallback(async (clientId: string, relationshipType: 'buyer' | 'seller' | 'both') => {
+    if (!state.agent) return
+
     try {
-      setLoading(true);
-      setError(null);
-      const brokerageList = await AgentService.getBrokerages();
-      setBrokerages(brokerageList);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setLoading(false);
+      const newClient = await AgentService.addClient(state.agent.id, clientId, relationshipType)
+      setState(prev => ({
+        ...prev,
+        clients: [...prev.clients, newClient],
+      }))
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to add client',
+      }))
     }
-  }, [handleError]);
+  }, [state.agent])
 
-  // Select brokerage
-  const selectBrokerage = useCallback(async (brokerageId: string) => {
+  // Update client relationship
+  const updateClient = useCallback(async (clientId: string, updates: Partial<AgentClient>) => {
     try {
-      setLoading(true);
-      setError(null);
-      const brokerage = await AgentService.getBrokerageById(brokerageId);
-      setSelectedBrokerage(brokerage);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setLoading(false);
+      const updatedClient = await AgentService.updateClientRelationship(clientId, updates)
+      setState(prev => ({
+        ...prev,
+        clients: prev.clients.map(c => c.id === clientId ? updatedClient : c),
+      }))
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to update client',
+      }))
     }
-  }, [handleError]);
+  }, [])
 
-  // Load commissions
-  const loadCommissions = useCallback(async (agentId: string) => {
+  // Create commission
+  const createCommission = useCallback(async (commissionData: Partial<Commission>) => {
+    if (!state.agent) return
+
     try {
-      setCommissionLoading(true);
-      setError(null);
-      const commissionList = await AgentService.getCommissions(agentId);
-      setCommissions(commissionList);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setCommissionLoading(false);
+      const newCommission = await AgentService.createCommission({
+        ...commissionData,
+        agentId: state.agent.id,
+      })
+      setState(prev => ({
+        ...prev,
+        commissions: [newCommission, ...prev.commissions],
+      }))
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to create commission',
+      }))
     }
-  }, [handleError]);
+  }, [state.agent])
 
-  // Load performance
-  const loadPerformance = useCallback(async (agentId: string, period?: string) => {
+  // Update commission
+  const updateCommission = useCallback(async (commissionId: string, updates: Partial<Commission>) => {
     try {
-      setPerformanceLoading(true);
-      setError(null);
-      const performanceData = await AgentService.getAgentPerformance(agentId, period);
-      setPerformance(performanceData);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setPerformanceLoading(false);
+      const updatedCommission = await AgentService.updateCommission(commissionId, updates)
+      setState(prev => ({
+        ...prev,
+        commissions: prev.commissions.map(c => c.id === commissionId ? updatedCommission : c),
+      }))
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to update commission',
+      }))
     }
-  }, [handleError]);
+  }, [])
 
-  // Load dashboard
-  const loadDashboard = useCallback(async (agentId: string) => {
+  // Create review
+  const createReview = useCallback(async (reviewData: Partial<AgentReview>) => {
+    if (!state.agent) return
+
     try {
-      setDashboardLoading(true);
-      setError(null);
-      const dashboardData = await AgentService.getAgentDashboard(agentId);
-      setDashboard(dashboardData);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setDashboardLoading(false);
+      const newReview = await AgentService.createReview({
+        ...reviewData,
+        agentId: state.agent.id,
+      })
+      setState(prev => ({
+        ...prev,
+        reviews: [newReview, ...prev.reviews],
+      }))
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to create review',
+      }))
     }
-  }, [handleError]);
+  }, [state.agent])
 
-  // Search agents
-  const searchAgents = useCallback(async (filters: AgentSearchFilters) => {
-    try {
-      setSearchLoading(true);
-      setError(null);
-      setSearchFilters(filters);
-      const results = await AgentService.getAgents(filters);
-      setSearchResults(results);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setSearchLoading(false);
-    }
-  }, [handleError]);
-
-  // Find matching agents
-  const findMatchingAgents = useCallback(async (preferences: any) => {
-    try {
-      setMatchingLoading(true);
-      setError(null);
-      const matches = await AgentService.findMatchingAgents(preferences);
-      setAgentMatches(matches);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setMatchingLoading(false);
-    }
-  }, [handleError]);
-
-  // Load initial data
+  // Load agent on mount
   useEffect(() => {
-    loadAgents();
-    loadBrokerages();
-  }, [loadAgents, loadBrokerages]);
+    if (agentId) {
+      loadAgent(agentId)
+    }
+  }, [agentId, loadAgent])
 
   return {
-    // Agent data
-    agents,
-    selectedAgent,
-    loading,
-    error,
-    
-    // Brokerage data
-    brokerages,
-    selectedBrokerage,
-    
-    // Commission data
-    commissions,
-    commissionLoading,
-    
-    // Performance data
-    performance,
-    performanceLoading,
-    
-    // Dashboard data
-    dashboard,
-    dashboardLoading,
-    
-    // Search and filters
-    searchFilters,
-    searchResults,
-    searchLoading,
-    
-    // Matching
-    agentMatches,
-    matchingLoading,
-    
-    // Actions
-    loadAgents,
-    selectAgent,
-    createAgent,
+    ...state,
+    loadAgent,
     updateAgent,
-    verifyAgent,
-    loadBrokerages,
-    selectBrokerage,
-    loadCommissions,
-    loadPerformance,
-    loadDashboard,
+    addClient,
+    updateClient,
+    createCommission,
+    updateCommission,
+    createReview,
+  }
+}
+
+export function useAgentSearch() {
+  const [state, setState] = useState<AgentSearchState>({
+    agents: [],
+    totalCount: 0,
+    isLoading: false,
+    error: null,
+    filters: {},
+  })
+
+  // Search agents
+  const searchAgents = useCallback(async (filters: AgentSearchFilters, limit = 20, offset = 0) => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true, error: null, filters }))
+      
+      const agents = await AgentService.searchAgents(filters, limit, offset)
+      
+      setState(prev => ({
+        ...prev,
+        agents,
+        totalCount: agents.length,
+        isLoading: false,
+      }))
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to search agents',
+        isLoading: false,
+      }))
+    }
+  }, [])
+
+  // Find matching agents
+  const findMatchingAgents = useCallback(async (criteria: AgentMatchingCriteria) => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true, error: null }))
+      
+      const agents = await AgentService.findMatchingAgents(criteria)
+      
+      setState(prev => ({
+        ...prev,
+        agents,
+        totalCount: agents.length,
+        isLoading: false,
+      }))
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to find matching agents',
+        isLoading: false,
+      }))
+    }
+  }, [])
+
+  // Clear search
+  const clearSearch = useCallback(() => {
+    setState({
+      agents: [],
+      totalCount: 0,
+      isLoading: false,
+      error: null,
+      filters: {},
+    })
+  }, [])
+
+  return {
+    ...state,
     searchAgents,
     findMatchingAgents,
-    clearError
-  };
-};
+    clearSearch,
+  }
+}
+
+export function useAgentAnalytics(agentId?: string) {
+  const [analytics, setAnalytics] = useState<AgentAnalytics | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Load analytics
+  const loadAnalytics = useCallback(async (id: string) => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const agentData = await AgentService.getAgentAnalytics(id)
+      const agent = agentData.agent
+      const commissions = agentData.commissions || []
+
+      // Calculate projections
+      const monthlyProjections = CommissionCalculator.calculateMonthlyProjections(
+        agent,
+        agent.stats.propertiesSold / 12, // Average monthly sales
+        agent.stats.totalSalesValue / agent.stats.totalSales // Average sale price
+      )
+
+      // Calculate yearly summary
+      const yearlySummary = CommissionCalculator.calculateYearToDateSummary(commissions)
+
+      // Calculate goal performance
+      const monthlyGoal = agent.stats.totalCommission / 12 // Average monthly goal
+      const yearlyGoal = agent.stats.totalCommission
+      const goalPerformance = CommissionCalculator.calculateGoalPerformance(
+        commissions,
+        monthlyGoal,
+        yearlyGoal
+      )
+
+      setAnalytics({
+        totalCommission: agentData.totalCommission,
+        averageRating: agentData.averageRating,
+        totalReviews: agentData.totalReviews,
+        totalClients: agentData.totalClients,
+        activeClients: agentData.activeClients,
+        pendingCommissions: agentData.pendingCommissions,
+        paidCommissions: agentData.paidCommissions,
+        monthlyProjections,
+        yearlySummary,
+        goalPerformance,
+      })
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to load analytics')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  // Calculate commission for property
+  const calculateCommission = useCallback((propertyValue: number): CommissionCalculation => {
+    if (!analytics) {
+      throw new Error('Analytics not loaded')
+    }
+    
+    // This would need the actual agent data, but for now we'll use a mock
+    const mockAgent = {
+      id: agentId || '',
+      commissionRate: 0.03, // 3%
+    } as Agent
+
+    return CommissionCalculator.calculateCommission(propertyValue, mockAgent)
+  }, [analytics, agentId])
+
+  // Load analytics on mount
+  useEffect(() => {
+    if (agentId) {
+      loadAnalytics(agentId)
+    }
+  }, [agentId, loadAnalytics])
+
+  return {
+    analytics,
+    isLoading,
+    error,
+    loadAnalytics,
+    calculateCommission,
+  }
+}
+
+export function useBrokerage(brokerageId?: string) {
+  const [brokerage, setBrokerage] = useState<Brokerage | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Load brokerage
+  const loadBrokerage = useCallback(async (id: string) => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const brokerageData = await AgentService.getBrokerage(id)
+      setBrokerage(brokerageData)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to load brokerage')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  // Load brokerage on mount
+  useEffect(() => {
+    if (brokerageId) {
+      loadBrokerage(brokerageId)
+    }
+  }, [brokerageId, loadBrokerage])
+
+  return {
+    brokerage,
+    isLoading,
+    error,
+    loadBrokerage,
+  }
+}
