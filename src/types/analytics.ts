@@ -302,3 +302,4 @@ export interface AnalyticsActions {
   updateConfig: (config: Partial<AnalyticsConfig>) => Promise<boolean>;
   getConfig: () => Promise<AnalyticsConfig>;
 }
+

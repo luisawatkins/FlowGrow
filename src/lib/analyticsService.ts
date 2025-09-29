@@ -643,3 +643,4 @@ export class AnalyticsService {
 
 // Export singleton instance
 export const analyticsService = AnalyticsService.getInstance();
+
