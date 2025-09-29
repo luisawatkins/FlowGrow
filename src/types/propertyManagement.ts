@@ -1,422 +1,495 @@
-export interface Tenant {
-  id: string;
-  propertyId: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  dateOfBirth: string;
-  ssn: string; // Encrypted
-  emergencyContact: {
-    name: string;
-    phone: string;
-    relationship: string;
-  };
-  employment: {
-    company: string;
-    position: string;
-    monthlyIncome: number;
-    startDate: string;
-    supervisorName: string;
-    supervisorPhone: string;
-  };
-  references: TenantReference[];
-  creditScore: number;
-  backgroundCheck: {
-    status: 'pending' | 'approved' | 'rejected';
-    date: string;
-    notes?: string;
-  };
-  moveInDate: string;
-  moveOutDate?: string;
-  status: 'prospective' | 'active' | 'inactive' | 'evicted';
-  leaseId?: string;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
+// Property Management Types and Interfaces
+
+export interface PropertyManagement {
+  propertyId: number;
+  owner: string;
+  manager?: string;
+  rentAmount: number;
+  rentDueDate: number;
+  maintenanceFund: number;
+  isActive: boolean;
+  createdAt: number;
+  lastRentCollection?: number;
+  tenantCount: number;
+  totalRevenue: number;
+  maintenanceRequests: number[];
 }
 
-export interface TenantReference {
-  id: string;
-  name: string;
-  relationship: string;
-  phone: string;
-  email: string;
-  yearsKnown: number;
-  rating: number;
-  comments: string;
-  isVerified: boolean;
-}
-
-export interface Lease {
-  id: string;
-  propertyId: string;
-  tenantId: string;
-  startDate: string;
-  endDate: string;
+export interface TenantInfo {
+  tenantId: number;
+  propertyId: number;
+  tenantAddress: string;
+  leaseStartDate: number;
+  leaseEndDate: number;
   monthlyRent: number;
   securityDeposit: number;
-  petDeposit?: number;
+  isActive: boolean;
+  paymentHistory: PaymentRecord[];
+  maintenanceRequests: number[];
+}
+
+export interface PaymentRecord {
+  paymentId: number;
+  amount: number;
+  paymentDate: number;
+  paymentType: string;
+  isLate: boolean;
   lateFee: number;
-  gracePeriod: number; // days
-  leaseTerms: LeaseTerm[];
-  utilities: Utility[];
-  parkingSpaces: number;
-  petPolicy: PetPolicy;
-  renewalOptions: RenewalOption[];
-  status: 'draft' | 'active' | 'expired' | 'terminated' | 'renewed';
-  signedDate?: string;
-  terminationDate?: string;
-  terminationReason?: string;
-  notes: string;
-  documents: LeaseDocument[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface LeaseTerm {
-  id: string;
-  type: 'rent' | 'deposit' | 'fee' | 'utility' | 'maintenance' | 'other';
-  description: string;
-  amount: number;
-  frequency: 'monthly' | 'quarterly' | 'annually' | 'one-time';
-  dueDate?: string;
-  isRequired: boolean;
-}
-
-export interface Utility {
-  id: string;
-  name: string;
-  type: 'electric' | 'gas' | 'water' | 'sewer' | 'trash' | 'internet' | 'cable' | 'other';
-  isIncluded: boolean;
-  monthlyCost?: number;
-  provider?: string;
-  accountNumber?: string;
-  notes?: string;
-}
-
-export interface PetPolicy {
-  allowed: boolean;
-  types: string[];
-  sizeLimit?: string;
-  weightLimit?: number;
-  additionalDeposit?: number;
-  monthlyFee?: number;
-  restrictions: string[];
-}
-
-export interface RenewalOption {
-  id: string;
-  termLength: number; // months
-  newRent: number;
-  effectiveDate: string;
-  isAutomatic: boolean;
-  noticeRequired: number; // days
-}
-
-export interface LeaseDocument {
-  id: string;
-  name: string;
-  type: 'lease' | 'addendum' | 'notice' | 'inspection' | 'other';
-  fileUrl: string;
-  fileSize: number;
-  mimeType: string;
-  uploadedDate: string;
-  signedDate?: string;
-  isRequired: boolean;
-  status: 'draft' | 'pending' | 'signed' | 'expired';
-}
-
-export interface RentPayment {
-  id: string;
-  tenantId: string;
-  propertyId: string;
-  leaseId: string;
-  amount: number;
-  dueDate: string;
-  paidDate?: string;
-  paymentMethod: 'check' | 'cash' | 'bank_transfer' | 'credit_card' | 'online';
-  status: 'pending' | 'paid' | 'late' | 'partial' | 'overdue';
-  lateFee?: number;
-  notes?: string;
-  receiptUrl?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface MaintenanceRequest {
-  id: string;
-  propertyId: string;
-  tenantId: string;
-  unitId?: string;
-  title: string;
+  requestId: number;
+  propertyId: number;
+  tenantId?: number;
   description: string;
-  category: 'plumbing' | 'electrical' | 'hvac' | 'appliance' | 'structural' | 'pest' | 'cleaning' | 'other';
-  priority: 'low' | 'medium' | 'high' | 'emergency';
-  status: 'submitted' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
-  submittedDate: string;
-  scheduledDate?: string;
-  completedDate?: string;
+  priority: MaintenancePriority;
+  estimatedCost: number;
+  status: MaintenanceStatus;
+  createdAt: number;
+  completedAt?: number;
   assignedVendor?: string;
-  estimatedCost?: number;
   actualCost?: number;
-  photos: string[];
-  tenantAccess: boolean;
-  followUpRequired: boolean;
-  followUpDate?: string;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
-export interface Vendor {
-  id: string;
+export interface AutomationTask {
+  taskId: number;
+  taskType: AutomationTaskType;
+  propertyId: number;
+  owner: string;
+  schedule: AutomationSchedule;
+  isActive: boolean;
+  lastExecuted?: number;
+  nextExecution: number;
+  executionCount: number;
+  successCount: number;
+  failureCount: number;
+  parameters: Record<string, string>;
+}
+
+export interface AutomationSchedule {
+  scheduleType: ScheduleType;
+  interval: number; // seconds
+  startTime: number;
+  endTime?: number;
+  timezone: string;
+  customSchedule?: Record<string, string>;
+}
+
+export interface AutomationResult {
+  taskId: number;
+  executionTime: number;
+  success: boolean;
+  message: string;
+  data: Record<string, string>;
+  gasUsed: number;
+  executionDuration: number;
+}
+
+export interface TenantProfile {
+  tenantId: number;
+  address: string;
   name: string;
-  contactPerson: string;
   email: string;
   phone: string;
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  specialties: string[];
-  licenseNumber?: string;
-  insuranceInfo: {
-    provider: string;
-    policyNumber: string;
-    expirationDate: string;
-  };
-  rating: number;
-  reviewCount: number;
-  hourlyRate?: number;
+  dateOfBirth: number;
+  ssn: string;
+  employmentInfo: EmploymentInfo;
+  creditScore: number;
+  income: number;
+  references: Reference[];
+  verificationStatus: VerificationStatus;
+  kycStatus: KYCStatus;
+  amlStatus: AMLStatus;
+  riskScore: number;
+  reputationScore: number;
+  createdAt: number;
+  lastUpdated: number;
+  isActive: boolean;
+}
+
+export interface EmploymentInfo {
+  employer: string;
+  position: string;
+  startDate: number;
+  salary: number;
+  employmentType: EmploymentType;
+  employerContact: string;
   isVerified: boolean;
-  isActive: boolean;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
-export interface PropertyUnit {
-  id: string;
-  propertyId: string;
-  unitNumber: string;
-  floor: number;
-  bedrooms: number;
-  bathrooms: number;
-  squareFootage: number;
-  rent: number;
-  deposit: number;
-  status: 'available' | 'occupied' | 'maintenance' | 'renovation';
-  tenantId?: string;
-  leaseId?: string;
-  moveInDate?: string;
-  moveOutDate?: string;
-  amenities: string[];
-  photos: string[];
-  floorPlan?: string;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
+export interface Reference {
+  referenceId: number;
+  name: string;
+  relationship: string;
+  contact: string;
+  isVerified: boolean;
+  rating: number;
 }
 
-export interface PropertyManager {
-  id: string;
+export interface LeaseAgreement {
+  leaseId: number;
+  tenantId: number;
+  propertyId: number;
+  landlordAddress: string;
+  startDate: number;
+  endDate: number;
+  monthlyRent: number;
+  securityDeposit: number;
+  petDeposit: number;
+  lateFee: number;
+  leaseTerms: Record<string, string>;
+  status: LeaseStatus;
+  createdAt: number;
+  signedAt?: number;
+  terminatedAt?: number;
+  terminationReason?: string;
+}
+
+export interface TenantCommunication {
+  communicationId: number;
+  tenantId: number;
+  propertyId: number;
+  sender: string;
+  recipient: string;
+  messageType: CommunicationType;
+  subject: string;
+  message: string;
+  timestamp: number;
+  isRead: boolean;
+  priority: CommunicationPriority;
+}
+
+export interface PropertyPerformance {
+  occupancyRate: number;
+  revenuePerMonth: number;
+  maintenanceRatio: number;
+  totalRevenue: number;
+  maintenanceCost: number;
+}
+
+export interface AutomationStats {
+  totalTasks: number;
+  activeTasks: number;
+  totalExecutions: number;
+  successfulExecutions: number;
+  failedExecutions: number;
+}
+
+// Enums
+export enum MaintenancePriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT'
+}
+
+export enum MaintenanceStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED'
+}
+
+export enum AutomationTaskType {
+  RENT_COLLECTION = 'RENT_COLLECTION',
+  MAINTENANCE_REMINDER = 'MAINTENANCE_REMINDER',
+  LEASE_RENEWAL = 'LEASE_RENEWAL',
+  PROPERTY_INSPECTION = 'PROPERTY_INSPECTION',
+  UTILITY_PAYMENT = 'UTILITY_PAYMENT',
+  MARKET_ANALYSIS = 'MARKET_ANALYSIS',
+  TENANT_COMMUNICATION = 'TENANT_COMMUNICATION',
+  SECURITY_CHECK = 'SECURITY_CHECK'
+}
+
+export enum ScheduleType {
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+  QUARTERLY = 'QUARTERLY',
+  YEARLY = 'YEARLY',
+  CUSTOM = 'CUSTOM'
+}
+
+export enum VerificationStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+  EXPIRED = 'EXPIRED'
+}
+
+export enum KYCStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+  EXPIRED = 'EXPIRED'
+}
+
+export enum AMLStatus {
+  PENDING = 'PENDING',
+  CLEAR = 'CLEAR',
+  FLAGGED = 'FLAGGED',
+  BLOCKED = 'BLOCKED'
+}
+
+export enum EmploymentType {
+  FULL_TIME = 'FULL_TIME',
+  PART_TIME = 'PART_TIME',
+  CONTRACT = 'CONTRACT',
+  SELF_EMPLOYED = 'SELF_EMPLOYED',
+  UNEMPLOYED = 'UNEMPLOYED'
+}
+
+export enum LeaseStatus {
+  DRAFT = 'DRAFT',
+  PENDING_SIGNATURE = 'PENDING_SIGNATURE',
+  ACTIVE = 'ACTIVE',
+  EXPIRED = 'EXPIRED',
+  TERMINATED = 'TERMINATED',
+  RENEWED = 'RENEWED'
+}
+
+export enum CommunicationType {
+  RENT_REMINDER = 'RENT_REMINDER',
+  MAINTENANCE_UPDATE = 'MAINTENANCE_UPDATE',
+  LEASE_NOTICE = 'LEASE_NOTICE',
+  GENERAL = 'GENERAL',
+  EMERGENCY = 'EMERGENCY',
+  INSPECTION_NOTICE = 'INSPECTION_NOTICE'
+}
+
+export enum CommunicationPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT'
+}
+
+// API Response Types
+export interface PropertyManagementResponse {
+  success: boolean;
+  data?: PropertyManagement;
+  error?: string;
+}
+
+export interface TenantResponse {
+  success: boolean;
+  data?: TenantInfo;
+  error?: string;
+}
+
+export interface MaintenanceResponse {
+  success: boolean;
+  data?: MaintenanceRequest;
+  error?: string;
+}
+
+export interface AutomationResponse {
+  success: boolean;
+  data?: AutomationTask;
+  error?: string;
+}
+
+export interface PropertyPerformanceResponse {
+  success: boolean;
+  data?: PropertyPerformance;
+  error?: string;
+}
+
+// Form Types
+export interface PropertyRegistrationForm {
+  propertyId: number;
+  manager?: string;
+  rentAmount: number;
+  rentDueDate: number;
+  maintenanceFund: number;
+}
+
+export interface TenantRegistrationForm {
+  tenantId: number;
+  address: string;
   name: string;
   email: string;
   phone: string;
-  company: string;
-  properties: string[];
-  permissions: PropertyManagerPermission[];
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  dateOfBirth: number;
+  ssn: string;
+  employmentInfo: EmploymentInfo;
+  creditScore: number;
+  income: number;
+  references: Reference[];
 }
 
-export interface PropertyManagerPermission {
+export interface MaintenanceRequestForm {
+  requestId: number;
+  propertyId: number;
+  tenantId?: number;
+  description: string;
+  priority: MaintenancePriority;
+  estimatedCost: number;
+}
+
+export interface AutomationTaskForm {
+  taskId: number;
+  taskType: AutomationTaskType;
+  propertyId: number;
+  schedule: AutomationSchedule;
+  parameters: Record<string, string>;
+}
+
+export interface LeaseAgreementForm {
+  leaseId: number;
+  tenantId: number;
+  propertyId: number;
+  landlordAddress: string;
+  startDate: number;
+  endDate: number;
+  monthlyRent: number;
+  securityDeposit: number;
+  petDeposit: number;
+  lateFee: number;
+  leaseTerms: Record<string, string>;
+}
+
+// Filter and Search Types
+export interface PropertyManagementFilters {
+  isActive?: boolean;
+  minRentAmount?: number;
+  maxRentAmount?: number;
+  hasTenants?: boolean;
+  maintenanceRequired?: boolean;
+}
+
+export interface TenantFilters {
+  isActive?: boolean;
+  verificationStatus?: VerificationStatus;
+  minCreditScore?: number;
+  maxRiskScore?: number;
+  hasActiveLease?: boolean;
+}
+
+export interface MaintenanceFilters {
+  status?: MaintenanceStatus;
+  priority?: MaintenancePriority;
+  propertyId?: number;
+  tenantId?: number;
+  dateRange?: {
+    start: number;
+    end: number;
+  };
+}
+
+export interface AutomationFilters {
+  taskType?: AutomationTaskType;
+  isActive?: boolean;
+  propertyId?: number;
+  scheduleType?: ScheduleType;
+}
+
+// Analytics Types
+export interface PropertyAnalytics {
+  totalProperties: number;
+  activeProperties: number;
+  totalTenants: number;
+  activeTenants: number;
+  totalRevenue: number;
+  monthlyRevenue: number;
+  totalMaintenanceCost: number;
+  averageOccupancyRate: number;
+  averageRentAmount: number;
+  pendingMaintenanceRequests: number;
+  overdueRentPayments: number;
+}
+
+export interface TenantAnalytics {
+  totalTenants: number;
+  verifiedTenants: number;
+  activeLeases: number;
+  expiringLeases: number;
+  averageCreditScore: number;
+  averageRiskScore: number;
+  averageReputationScore: number;
+  pendingVerifications: number;
+}
+
+export interface AutomationAnalytics {
+  totalTasks: number;
+  activeTasks: number;
+  totalExecutions: number;
+  successRate: number;
+  averageExecutionTime: number;
+  totalGasUsed: number;
+  mostCommonTaskType: AutomationTaskType;
+  tasksByProperty: Record<number, number>;
+}
+
+// Event Types
+export interface PropertyManagementEvent {
+  type: string;
+  timestamp: number;
+  propertyId: number;
+  tenantId?: number;
+  data: Record<string, any>;
+}
+
+export interface AutomationEvent {
+  type: string;
+  timestamp: number;
+  taskId: number;
+  propertyId: number;
+  result: AutomationResult;
+}
+
+export interface TenantEvent {
+  type: string;
+  timestamp: number;
+  tenantId: number;
+  propertyId: number;
+  data: Record<string, any>;
+}
+
+// Notification Types
+export interface PropertyManagementNotification {
   id: string;
-  type: 'tenant_management' | 'maintenance' | 'financial' | 'reporting' | 'admin';
-  level: 'read' | 'write' | 'admin';
-  propertyIds: string[];
-}
-
-export interface TenantPortal {
-  tenantId: string;
-  propertyId: string;
-  leaseId: string;
-  dashboard: {
-    upcomingPayments: RentPayment[];
-    recentMaintenanceRequests: MaintenanceRequest[];
-    announcements: Announcement[];
-    documents: LeaseDocument[];
-  };
-  features: {
-    rentPayment: boolean;
-    maintenanceRequests: boolean;
-    documentAccess: boolean;
-    announcements: boolean;
-    leaseRenewal: boolean;
-    moveOut: boolean;
-  };
-  lastLogin: string;
-  preferences: {
-    notifications: {
-      email: boolean;
-      sms: boolean;
-      push: boolean;
-    };
-    language: string;
-    timezone: string;
-  };
-}
-
-export interface Announcement {
-  id: string;
-  propertyId: string;
+  type: string;
   title: string;
   message: string;
-  type: 'general' | 'maintenance' | 'emergency' | 'policy' | 'event';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  targetAudience: 'all' | 'tenants' | 'owners' | 'managers';
-  publishDate: string;
-  expiryDate?: string;
-  isActive: boolean;
-  attachments: string[];
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PropertyManagementDashboard {
-  propertyId: string;
-  overview: {
-    totalUnits: number;
-    occupiedUnits: number;
-    vacantUnits: number;
-    occupancyRate: number;
-    monthlyRent: number;
-    monthlyExpenses: number;
-    netIncome: number;
-  };
-  tenants: {
-    active: number;
-    new: number;
-    departing: number;
-    overdue: number;
-  };
-  maintenance: {
-    open: number;
-    inProgress: number;
-    completed: number;
-    overdue: number;
-  };
-  financials: {
-    rentCollected: number;
-    rentDue: number;
-    expenses: number;
-    profit: number;
-  };
-  recentActivity: Activity[];
-  upcomingTasks: Task[];
-  alerts: Alert[];
-}
-
-export interface Activity {
-  id: string;
-  type: 'payment' | 'maintenance' | 'lease' | 'tenant' | 'property';
-  description: string;
-  propertyId: string;
-  tenantId?: string;
-  amount?: number;
-  date: string;
-  status: 'success' | 'warning' | 'error' | 'info';
-}
-
-export interface Task {
-  id: string;
-  title: string;
-  description: string;
-  type: 'maintenance' | 'inspection' | 'lease' | 'payment' | 'other';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  dueDate: string;
-  assignedTo: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'overdue';
-  propertyId: string;
-  tenantId?: string;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Alert {
-  id: string;
-  type: 'payment_overdue' | 'maintenance_urgent' | 'lease_expiring' | 'inspection_due' | 'other';
-  title: string;
-  message: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  propertyId: string;
-  tenantId?: string;
+  timestamp: number;
+  propertyId: number;
+  tenantId?: number;
+  priority: CommunicationPriority;
   isRead: boolean;
-  actionRequired: boolean;
+  actionRequired?: boolean;
   actionUrl?: string;
-  createdAt: string;
 }
 
-export interface Inspection {
-  id: string;
-  propertyId: string;
-  unitId?: string;
-  tenantId?: string;
-  type: 'move_in' | 'move_out' | 'routine' | 'damage' | 'safety' | 'other';
-  scheduledDate: string;
-  completedDate?: string;
-  inspector: string;
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
-  findings: InspectionFinding[];
-  photos: string[];
-  notes: string;
-  followUpRequired: boolean;
-  followUpDate?: string;
-  createdAt: string;
-  updatedAt: string;
+// Dashboard Types
+export interface PropertyManagementDashboard {
+  properties: PropertyManagement[];
+  tenants: TenantInfo[];
+  maintenanceRequests: MaintenanceRequest[];
+  automationTasks: AutomationTask[];
+  analytics: PropertyAnalytics;
+  recentEvents: PropertyManagementEvent[];
+  notifications: PropertyManagementNotification[];
 }
 
-export interface InspectionFinding {
-  id: string;
-  category: 'cleanliness' | 'damage' | 'safety' | 'maintenance' | 'other';
-  description: string;
-  severity: 'minor' | 'moderate' | 'major' | 'critical';
-  cost?: number;
-  isRepaired: boolean;
-  repairDate?: string;
-  photos: string[];
-  notes: string;
+// Error Types
+export interface PropertyManagementError {
+  code: string;
+  message: string;
+  details?: Record<string, any>;
+  timestamp: number;
+  propertyId?: number;
+  tenantId?: number;
 }
 
-export interface PropertyManagementSettings {
-  propertyId: string;
-  rentCollection: {
-    gracePeriod: number;
-    lateFee: number;
-    lateFeeType: 'fixed' | 'percentage';
-    autoReminders: boolean;
-    reminderDays: number[];
-  };
-  maintenance: {
-    autoAssignment: boolean;
-    defaultVendor: string;
-    approvalRequired: boolean;
-    maxCostWithoutApproval: number;
-  };
-  communications: {
-    defaultLanguage: string;
-    autoNotifications: boolean;
-    notificationTypes: string[];
-  };
-  reporting: {
-    frequency: 'daily' | 'weekly' | 'monthly';
-    recipients: string[];
-    includeCharts: boolean;
-  };
+// Configuration Types
+export interface PropertyManagementConfig {
+  defaultRentDueDate: number; // days from start of month
+  lateFeePercentage: number;
+  maintenanceFundPercentage: number;
+  maxTenantsPerProperty: number;
+  defaultLeaseDuration: number; // days
+  automationEnabled: boolean;
+  notificationsEnabled: boolean;
+  auditLoggingEnabled: boolean;
 }
