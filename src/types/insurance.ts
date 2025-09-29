@@ -423,3 +423,5 @@ export interface InsuranceActions {
   getMetrics: () => Promise<InsuranceMetrics>;
   generateReport: (type: string, filters: InsuranceFilter) => Promise<any>;
 }
+
+

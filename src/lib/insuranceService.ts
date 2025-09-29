@@ -823,3 +823,5 @@ export class InsuranceService {
 
 // Export singleton instance
 export const insuranceService = InsuranceService.getInstance();
+
+
