@@ -1,52 +1,91 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../auth/[...nextauth]/route';
 
-// Mock notifications data (replace with actual database integration)
-let mockNotifications = [
-  {
-    id: '1',
-    title: 'New Property Match',
-    message: 'A new property matching your search criteria is now available.',
-    type: 'info',
-    isRead: false,
-    createdAt: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-  },
-  {
-    id: '2',
-    title: 'Price Drop Alert',
-    message: 'A property in your favorites list has reduced its price.',
-    type: 'success',
-    isRead: false,
-    createdAt: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
-  },
-  {
-    id: '3',
-    title: 'Viewing Scheduled',
-    message: 'Your property viewing has been confirmed for tomorrow.',
-    type: 'info',
-    isRead: true,
-    createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-  },
-];
+export interface Notification {
+  id: string;
+  userId: string;
+  type: 'property_update' | 'price_change' | 'new_message' | 'inquiry' | 'system';
+  title: string;
+  message: string;
+  propertyId?: string;
+  isRead: boolean;
+  createdAt: string;
+}
 
-export async function GET() {
+// Mock database for notifications
+const notifications = new Map<string, Notification[]>();
+
+export async function GET(request: NextRequest) {
   try {
-    // Simulate database delay
-    await new Promise(resolve => setTimeout(resolve, 100));
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
-    // Sort notifications by date (newest first) and read status
-    const sortedNotifications = [...mockNotifications].sort((a, b) => {
-      if (a.isRead === b.isRead) {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      return a.isRead ? 1 : -1;
-    });
+    const userId = (session.user as any).id;
+    const userNotifications = notifications.get(userId) || [];
 
-    return NextResponse.json(sortedNotifications);
+    // Sort notifications by date (newest first)
+    const sortedNotifications = [...userNotifications].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    return NextResponse.json({ notifications: sortedNotifications });
   } catch (error) {
     console.error('Error fetching notifications:', error);
     return NextResponse.json(
       { error: 'Failed to fetch notifications' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const userId = (session.user as any).id;
+    const { type, title, message, propertyId } = await request.json();
+
+    // Validate required fields
+    if (!type || !title || !message) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    const notification: Notification = {
+      id: Math.random().toString(36).substr(2, 9),
+      userId,
+      type,
+      title,
+      message,
+      propertyId,
+      isRead: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    const userNotifications = notifications.get(userId) || [];
+    userNotifications.push(notification);
+    notifications.set(userId, userNotifications);
+
+    return NextResponse.json(notification);
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    return NextResponse.json(
+      { error: 'Failed to create notification' },
       { status: 500 }
     );
   }

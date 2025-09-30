@@ -1,101 +1,84 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../auth/[...nextauth]/route';
 
-// Mock property data (replace with actual database integration)
-const mockProperties = new Map([
-  ['1', {
-    id: '1',
-    title: 'Modern Downtown Apartment',
-    price: 450000,
-    location: 'Downtown',
-    agent: {
-      name: 'John Smith',
-      email: 'john.smith@example.com',
-    },
-  }],
-  ['2', {
-    id: '2',
-    title: 'Suburban Family Home',
-    price: 750000,
-    location: 'Suburbs',
-    agent: {
-      name: 'Jane Doe',
-      email: 'jane.doe@example.com',
-    },
-  }],
-]);
+export interface PropertyInquiry {
+  propertyId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  message: string;
+  preferredContactMethod: 'email' | 'phone';
+  preferredViewingTime?: string;
+  isPreApproved?: boolean;
+}
 
-// Mock inquiries storage
-const mockInquiries = new Map<string, any[]>();
+// Mock database for inquiries
+const inquiries = new Map<string, PropertyInquiry[]>();
 
 export async function POST(request: NextRequest) {
   try {
-    const {
-      propertyId,
-      name,
-      email,
-      phone,
-      message,
-    } = await request.json();
+    const session = await getServerSession(authOptions);
+    const inquiry: PropertyInquiry = await request.json();
 
     // Validate required fields
-    if (!propertyId || !name || !email || !message) {
+    const requiredFields = ['propertyId', 'name', 'email', 'message', 'preferredContactMethod'];
+    for (const field of requiredFields) {
+      if (!inquiry[field]) {
+        return NextResponse.json(
+          { error: `Missing required field: ${field}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inquiry.email)) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Invalid email format' },
         { status: 400 }
       );
     }
 
-    const property = mockProperties.get(propertyId);
-    
-    if (!property) {
-      return NextResponse.json(
-        { error: 'Property not found' },
-        { status: 404 }
-      );
+    // Validate phone format if provided
+    if (inquiry.phone) {
+      const phoneRegex = /^\+?[\d\s-]{10,}$/;
+      if (!phoneRegex.test(inquiry.phone)) {
+        return NextResponse.json(
+          { error: 'Invalid phone format' },
+          { status: 400 }
+        );
+      }
     }
 
-    // Create new inquiry
-    const inquiry = {
-      id: Date.now().toString(),
-      propertyId,
-      name,
-      email,
-      phone,
-      message,
-      createdAt: new Date().toISOString(),
-      status: 'pending',
-    };
-
-    // Store inquiry
-    const propertyInquiries = mockInquiries.get(propertyId) || [];
-    propertyInquiries.push(inquiry);
-    mockInquiries.set(propertyId, propertyInquiries);
+    // Store the inquiry
+    const propertyInquiries = inquiries.get(inquiry.propertyId) || [];
+    propertyInquiries.push({
+      ...inquiry,
+      // Add user info if available
+      ...(session?.user && {
+        userId: (session.user as any).id,
+        userEmail: session.user.email,
+      }),
+    });
+    inquiries.set(inquiry.propertyId, propertyInquiries);
 
     // In a real application, you would:
-    // 1. Save the inquiry to the database
-    // 2. Send notification emails to the agent and the inquirer
-    // 3. Create a task/ticket in your CRM system
-    // 4. Track inquiry analytics
-    // 5. Implement spam protection and rate limiting
-
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // 1. Save to database
+    // 2. Send email notifications
+    // 3. Create notification for property owner
+    // 4. Schedule viewing if requested
 
     return NextResponse.json({
-      success: true,
-      inquiry: {
-        ...inquiry,
-        property: {
-          title: property.title,
-          location: property.location,
-        },
-      },
+      message: 'Inquiry submitted successfully',
+      inquiryId: Math.random().toString(36).substr(2, 9),
     });
   } catch (error) {
-    console.error('Error processing inquiry:', error);
+    console.error('Error submitting inquiry:', error);
     return NextResponse.json(
-      { error: 'Failed to process inquiry' },
+      { error: 'Failed to submit inquiry' },
       { status: 500 }
     );
   }

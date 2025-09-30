@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../auth/[...nextauth]/route';
 
-// Mock property data (replace with actual database integration)
-const mockProperties = new Map([
+// Mock property database
+const properties = new Map([
   ['1', {
     id: '1',
     title: 'Modern Downtown Apartment',
@@ -14,19 +16,23 @@ const mockProperties = new Map([
     propertyType: 'Apartment',
     location: 'Downtown',
     yearBuilt: 2020,
-    parking: '1 Covered Space',
-    features: [
-      'Modern Kitchen',
-      'Hardwood Floors',
-      'Large Windows',
-      'Central AC',
-    ],
-    amenities: [
-      'Gym',
-      'Pool',
-      'Package Room',
-      '24/7 Security',
-    ],
+    amenities: ['Parking', 'Gym', 'Pool'],
+    walkScore: 85,
+    transitScore: 90,
+    schoolRating: 8,
+    pricePerSqFt: 375,
+    hoaFees: 350,
+    propertyTax: 4500,
+    utilities: {
+      electric: 'Not included',
+      water: 'Not included',
+      gas: 'Not included',
+      internet: 'Not included',
+    },
+    parking: {
+      type: 'Garage',
+      spaces: 1,
+    },
   }],
   ['2', {
     id: '2',
@@ -39,113 +45,91 @@ const mockProperties = new Map([
     propertyType: 'House',
     location: 'Suburbs',
     yearBuilt: 2015,
-    parking: '2 Car Garage',
-    features: [
-      'Open Floor Plan',
-      'Fireplace',
-      'Master Suite',
-      'Walk-in Closets',
-    ],
-    amenities: [
-      'Large Backyard',
-      'Patio',
-      'Smart Home System',
-      'Security System',
-    ],
+    amenities: ['Garage', 'Garden', 'Fireplace'],
+    walkScore: 65,
+    transitScore: 45,
+    schoolRating: 9,
+    pricePerSqFt: 300,
+    hoaFees: 0,
+    propertyTax: 7500,
+    utilities: {
+      electric: 'Not included',
+      water: 'Not included',
+      gas: 'Not included',
+      internet: 'Not included',
+    },
+    parking: {
+      type: 'Garage',
+      spaces: 2,
+    },
   }],
 ]);
 
-// Mock comparison list storage (replace with actual database/cache)
-const mockComparisonLists = new Map<string, Set<string>>();
-
-// Mock user ID (replace with actual auth)
-const MOCK_USER_ID = 'user1';
-
-export async function GET() {
-  try {
-    // Simulate database delay
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    const userComparison = mockComparisonLists.get(MOCK_USER_ID) || new Set();
-    
-    // Get full property details
-    const properties = Array.from(userComparison)
-      .map(id => mockProperties.get(id))
-      .filter(Boolean);
-
-    return NextResponse.json(properties);
-  } catch (error) {
-    console.error('Error fetching comparison list:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch comparison list' },
-      { status: 500 }
-    );
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const { propertyId } = await request.json();
-
-    if (!propertyId) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
-        { error: 'Property ID is required' },
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const { propertyIds } = await request.json();
+    if (!Array.isArray(propertyIds) || propertyIds.length < 2) {
+      return NextResponse.json(
+        { error: 'At least two property IDs are required' },
         { status: 400 }
       );
     }
 
-    const property = mockProperties.get(propertyId);
-    
-    if (!property) {
+    // Get property details for comparison
+    const comparisonData = propertyIds
+      .map(id => properties.get(id))
+      .filter(Boolean);
+
+    if (comparisonData.length !== propertyIds.length) {
       return NextResponse.json(
-        { error: 'Property not found' },
+        { error: 'One or more properties not found' },
         { status: 404 }
       );
     }
 
-    // Get or initialize user's comparison list
-    let userComparison = mockComparisonLists.get(MOCK_USER_ID);
-    if (!userComparison) {
-      userComparison = new Set();
-      mockComparisonLists.set(MOCK_USER_ID, userComparison);
-    }
+    // Calculate additional comparison metrics
+    const enhancedData = comparisonData.map(property => ({
+      ...property,
+      metrics: {
+        pricePerBedroom: property.price / property.bedrooms,
+        pricePerBathroom: property.price / property.bathrooms,
+        totalMonthlyExpenses:
+          (property.hoaFees || 0) +
+          (property.propertyTax / 12) +
+          (property.price * 0.003 / 12), // Estimated insurance
+      },
+    }));
 
-    // Check if maximum properties reached
-    if (userComparison.size >= 4) {
-      return NextResponse.json(
-        { error: 'Maximum number of properties in comparison reached' },
-        { status: 400 }
-      );
-    }
-
-    // Add to comparison
-    userComparison.add(propertyId);
-
-    // Return updated list with full property details
-    const properties = Array.from(userComparison)
-      .map(id => mockProperties.get(id))
-      .filter(Boolean);
-
-    return NextResponse.json(properties);
+    return NextResponse.json({
+      properties: enhancedData,
+      summary: {
+        priceDifference: Math.abs(
+          enhancedData[0].price - enhancedData[1].price
+        ),
+        sizeDifference: Math.abs(
+          enhancedData[0].squareFeet - enhancedData[1].squareFeet
+        ),
+        pricePerSqFtDifference: Math.abs(
+          enhancedData[0].pricePerSqFt - enhancedData[1].pricePerSqFt
+        ),
+        monthlyExpensesDifference: Math.abs(
+          enhancedData[0].metrics.totalMonthlyExpenses -
+          enhancedData[1].metrics.totalMonthlyExpenses
+        ),
+      },
+    });
   } catch (error) {
-    console.error('Error adding to comparison:', error);
+    console.error('Error comparing properties:', error);
     return NextResponse.json(
-      { error: 'Failed to add to comparison' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE() {
-  try {
-    // Clear user's comparison list
-    mockComparisonLists.delete(MOCK_USER_ID);
-    
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error clearing comparison:', error);
-    return NextResponse.json(
-      { error: 'Failed to clear comparison' },
+      { error: 'Failed to compare properties' },
       { status: 500 }
     );
   }

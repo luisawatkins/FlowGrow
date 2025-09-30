@@ -1,74 +1,122 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-function calculateMonthlyPayment(
-  principal: number,
-  annualRate: number,
-  years: number
-): number {
-  const monthlyRate = annualRate / 100 / 12;
-  const numberOfPayments = years * 12;
-  
-  if (monthlyRate === 0) {
-    return principal / numberOfPayments;
-  }
+interface MortgageCalculationRequest {
+  propertyPrice: number;
+  downPayment: number;
+  interestRate: number;
+  loanTerm: number;
+  propertyTax?: number;
+  homeInsurance?: number;
+  pmi?: number;
+  hoa?: number;
+}
 
-  return (
-    (principal * monthlyRate * Math.pow(1 + monthlyRate, numberOfPayments)) /
-    (Math.pow(1 + monthlyRate, numberOfPayments) - 1)
-  );
+interface MortgagePayment {
+  principal: number;
+  interest: number;
+  propertyTax: number;
+  homeInsurance: number;
+  pmi: number;
+  hoa: number;
+  total: number;
+}
+
+interface AmortizationSchedule {
+  month: number;
+  payment: number;
+  principal: number;
+  interest: number;
+  balance: number;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const {
-      loanAmount,
-      interestRate,
-      loanTerm,
-      propertyTax,
-      insurance,
-      pmi,
-    } = await request.json();
+    const data: MortgageCalculationRequest = await request.json();
 
-    // Validate inputs
-    if (
-      typeof loanAmount !== 'number' ||
-      typeof interestRate !== 'number' ||
-      typeof loanTerm !== 'number' ||
-      typeof propertyTax !== 'number' ||
-      typeof insurance !== 'number'
-    ) {
-      return NextResponse.json(
-        { error: 'Invalid input parameters' },
-        { status: 400 }
-      );
+    // Validate required fields
+    const requiredFields = ['propertyPrice', 'downPayment', 'interestRate', 'loanTerm'];
+    for (const field of requiredFields) {
+      if (!(field in data)) {
+        return NextResponse.json(
+          { error: `Missing required field: ${field}` },
+          { status: 400 }
+        );
+      }
     }
 
-    // Calculate principal and interest payment
-    const principalAndInterest = calculateMonthlyPayment(
-      loanAmount,
-      interestRate,
-      loanTerm
-    );
+    // Calculate loan amount
+    const loanAmount = data.propertyPrice - data.downPayment;
+    const monthlyInterestRate = (data.interestRate / 100) / 12;
+    const numberOfPayments = data.loanTerm * 12;
 
-    // Calculate monthly tax and insurance
-    const monthlyTax = propertyTax / 12;
-    const monthlyInsurance = insurance / 12;
-    const monthlyPMI = pmi || 0;
+    // Calculate monthly mortgage payment (P&I)
+    const monthlyPayment =
+      (loanAmount *
+        (monthlyInterestRate *
+          Math.pow(1 + monthlyInterestRate, numberOfPayments))) /
+      (Math.pow(1 + monthlyInterestRate, numberOfPayments) - 1);
+
+    // Calculate additional costs
+    const monthlyPropertyTax = (data.propertyTax || 0) / 12;
+    const monthlyHomeInsurance = (data.homeInsurance || 0) / 12;
+    const monthlyPMI = (data.pmi || 0) / 12;
+    const monthlyHOA = (data.hoa || 0) / 12;
 
     // Calculate total monthly payment
-    const monthlyPayment = principalAndInterest + monthlyTax + monthlyInsurance + monthlyPMI;
+    const payment: MortgagePayment = {
+      principal: monthlyPayment - (loanAmount * monthlyInterestRate),
+      interest: loanAmount * monthlyInterestRate,
+      propertyTax: monthlyPropertyTax,
+      homeInsurance: monthlyHomeInsurance,
+      pmi: monthlyPMI,
+      hoa: monthlyHOA,
+      total:
+        monthlyPayment +
+        monthlyPropertyTax +
+        monthlyHomeInsurance +
+        monthlyPMI +
+        monthlyHOA,
+    };
 
-    // Calculate total payment over the loan term
-    const totalPayment = monthlyPayment * loanTerm * 12;
+    // Generate amortization schedule
+    const schedule: AmortizationSchedule[] = [];
+    let balance = loanAmount;
+    let month = 1;
+
+    while (month <= numberOfPayments && balance > 0) {
+      const interest = balance * monthlyInterestRate;
+      const principal = monthlyPayment - interest;
+      balance = balance - principal;
+
+      schedule.push({
+        month,
+        payment: monthlyPayment,
+        principal,
+        interest,
+        balance: Math.max(0, balance),
+      });
+
+      month++;
+    }
 
     return NextResponse.json({
-      monthlyPayment,
-      totalPayment,
-      principalAndInterest,
-      monthlyTax,
-      monthlyInsurance,
-      monthlyPMI,
+      payment,
+      schedule,
+      summary: {
+        totalPayments: numberOfPayments,
+        totalInterest: schedule.reduce((sum, month) => sum + month.interest, 0),
+        totalCost:
+          data.downPayment +
+          schedule.reduce(
+            (sum, month) => sum + month.payment,
+            0
+          ) +
+          (data.propertyTax || 0) * data.loanTerm +
+          (data.homeInsurance || 0) * data.loanTerm +
+          (data.pmi || 0) * data.loanTerm +
+          (data.hoa || 0) * data.loanTerm,
+      },
     });
   } catch (error) {
     console.error('Error calculating mortgage:', error);

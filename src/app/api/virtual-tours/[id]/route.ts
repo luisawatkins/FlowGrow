@@ -1,132 +1,85 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../../auth/[...nextauth]/route';
 
-// Mock virtual tour data (replace with actual database integration)
-const mockTours = new Map([
+interface VirtualTourScene {
+  id: string;
+  name: string;
+  imageUrl: string;
+  hotspots: {
+    id: string;
+    position: { x: number; y: number; z: number };
+    tooltip: string;
+    type: 'info' | 'navigation';
+    targetSceneId?: string;
+  }[];
+}
+
+interface VirtualTour {
+  id: string;
+  propertyId: string;
+  title: string;
+  description: string;
+  scenes: VirtualTourScene[];
+  defaultSceneId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Mock database for virtual tours
+const virtualTours = new Map<string, VirtualTour>([
   ['1', {
     id: '1',
-    title: 'Modern Downtown Apartment Virtual Tour',
+    propertyId: '1',
+    title: 'Modern Downtown Apartment Tour',
+    description: 'Take a virtual walk through this stunning downtown apartment',
     scenes: [
       {
         id: 'living-room',
         name: 'Living Room',
-        thumbnail: '/images/virtual-tours/living-room-thumb.jpg',
-        panoramaUrl: '/images/virtual-tours/living-room-360.jpg',
-        initialViewParameters: {
-          pitch: 0,
-          yaw: 0,
-          zoom: 1,
-        },
+        imageUrl: '/virtual-tours/apartment1/living-room.jpg',
         hotspots: [
           {
-            id: 'to-kitchen',
-            type: 'scene',
-            pitch: -10,
-            yaw: 45,
-            targetSceneId: 'kitchen',
-            title: 'Go to Kitchen',
+            id: 'living-room-kitchen',
+            position: { x: 1, y: 0, z: -2 },
+            tooltip: 'Go to Kitchen',
+            type: 'navigation',
+            targetSceneId: 'kitchen'
           },
           {
-            id: 'window-view',
-            type: 'info',
-            pitch: 0,
-            yaw: -90,
-            title: 'City View',
-            description: 'Stunning views of the downtown skyline',
-          },
-        ],
+            id: 'living-room-info',
+            position: { x: -1, y: 1, z: -1 },
+            tooltip: 'Large windows with city view',
+            type: 'info'
+          }
+        ]
       },
       {
         id: 'kitchen',
         name: 'Kitchen',
-        thumbnail: '/images/virtual-tours/kitchen-thumb.jpg',
-        panoramaUrl: '/images/virtual-tours/kitchen-360.jpg',
-        initialViewParameters: {
-          pitch: 0,
-          yaw: 180,
-          zoom: 1,
-        },
+        imageUrl: '/virtual-tours/apartment1/kitchen.jpg',
         hotspots: [
           {
-            id: 'to-living-room',
-            type: 'scene',
-            pitch: -10,
-            yaw: -135,
-            targetSceneId: 'living-room',
-            title: 'Back to Living Room',
+            id: 'kitchen-living-room',
+            position: { x: -1, y: 0, z: 2 },
+            tooltip: 'Back to Living Room',
+            type: 'navigation',
+            targetSceneId: 'living-room'
           },
           {
-            id: 'appliances',
-            type: 'info',
-            pitch: 0,
-            yaw: 45,
-            title: 'Modern Appliances',
-            description: 'High-end stainless steel appliances',
-          },
-        ],
-      },
+            id: 'kitchen-info',
+            position: { x: 1, y: 1, z: 1 },
+            tooltip: 'Modern appliances included',
+            type: 'info'
+          }
+        ]
+      }
     ],
-    autoRotate: true,
-    autoRotateSpeed: 0.5,
-  }],
-  ['2', {
-    id: '2',
-    title: 'Suburban Family Home Virtual Tour',
-    scenes: [
-      {
-        id: 'entrance',
-        name: 'Entrance',
-        thumbnail: '/images/virtual-tours/entrance-thumb.jpg',
-        panoramaUrl: '/images/virtual-tours/entrance-360.jpg',
-        initialViewParameters: {
-          pitch: 0,
-          yaw: 0,
-          zoom: 1,
-        },
-        hotspots: [
-          {
-            id: 'to-living-area',
-            type: 'scene',
-            pitch: -10,
-            yaw: 0,
-            targetSceneId: 'living-area',
-            title: 'Enter Living Area',
-          },
-        ],
-      },
-      {
-        id: 'living-area',
-        name: 'Living Area',
-        thumbnail: '/images/virtual-tours/living-area-thumb.jpg',
-        panoramaUrl: '/images/virtual-tours/living-area-360.jpg',
-        initialViewParameters: {
-          pitch: 0,
-          yaw: 90,
-          zoom: 1,
-        },
-        hotspots: [
-          {
-            id: 'to-entrance',
-            type: 'scene',
-            pitch: -10,
-            yaw: 180,
-            targetSceneId: 'entrance',
-            title: 'Back to Entrance',
-          },
-          {
-            id: 'fireplace',
-            type: 'info',
-            pitch: 0,
-            yaw: -45,
-            title: 'Fireplace',
-            description: 'Natural stone fireplace with gas insert',
-          },
-        ],
-      },
-    ],
-    autoRotate: true,
-    autoRotateSpeed: 0.5,
-  }],
+    defaultSceneId: 'living-room',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }]
 ]);
 
 export async function GET(
@@ -134,11 +87,9 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Simulate database delay
-    await new Promise(resolve => setTimeout(resolve, 100));
+    const tourId = params.id;
+    const tour = virtualTours.get(tourId);
 
-    const tour = mockTours.get(params.id);
-    
     if (!tour) {
       return NextResponse.json(
         { error: 'Virtual tour not found' },
@@ -151,6 +102,133 @@ export async function GET(
     console.error('Error fetching virtual tour:', error);
     return NextResponse.json(
       { error: 'Failed to fetch virtual tour' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const propertyId = params.id;
+    const { title, description, scenes, defaultSceneId } = await request.json();
+
+    // Validate required fields
+    if (!title || !scenes || !defaultSceneId) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Create new virtual tour
+    const newTour: VirtualTour = {
+      id: Math.random().toString(36).substr(2, 9),
+      propertyId,
+      title,
+      description,
+      scenes,
+      defaultSceneId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    virtualTours.set(newTour.id, newTour);
+
+    return NextResponse.json(newTour);
+  } catch (error) {
+    console.error('Error creating virtual tour:', error);
+    return NextResponse.json(
+      { error: 'Failed to create virtual tour' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const tourId = params.id;
+    const tour = virtualTours.get(tourId);
+
+    if (!tour) {
+      return NextResponse.json(
+        { error: 'Virtual tour not found' },
+        { status: 404 }
+      );
+    }
+
+    const updates = await request.json();
+    const updatedTour = {
+      ...tour,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    virtualTours.set(tourId, updatedTour);
+
+    return NextResponse.json(updatedTour);
+  } catch (error) {
+    console.error('Error updating virtual tour:', error);
+    return NextResponse.json(
+      { error: 'Failed to update virtual tour' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const tourId = params.id;
+    const tour = virtualTours.get(tourId);
+
+    if (!tour) {
+      return NextResponse.json(
+        { error: 'Virtual tour not found' },
+        { status: 404 }
+      );
+    }
+
+    virtualTours.delete(tourId);
+
+    return NextResponse.json({
+      message: 'Virtual tour deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting virtual tour:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete virtual tour' },
       { status: 500 }
     );
   }

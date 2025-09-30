@@ -1,25 +1,49 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../auth/[...nextauth]/route';
 
-// Mock saved searches storage (replace with actual database integration)
-const mockSavedSearches = new Map<string, any[]>();
+export interface SavedSearch {
+  id: string;
+  userId: string;
+  name: string;
+  filters: {
+    priceRange?: {
+      min: number;
+      max: number;
+    };
+    propertyType?: string;
+    bedrooms?: number;
+    bathrooms?: number;
+    location?: string;
+    squareFeet?: {
+      min: number;
+      max: number;
+    };
+  };
+  emailAlerts: boolean;
+  alertFrequency: 'daily' | 'weekly' | 'monthly';
+  createdAt: string;
+  lastRunAt: string;
+}
 
-// Mock user ID (replace with actual auth)
-const MOCK_USER_ID = 'user1';
+// Mock database for saved searches
+const savedSearches = new Map<string, SavedSearch[]>();
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Simulate database delay
-    await new Promise(resolve => setTimeout(resolve, 100));
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
-    const userSearches = mockSavedSearches.get(MOCK_USER_ID) || [];
-    
-    // Sort by creation date (newest first)
-    const sortedSearches = [...userSearches].sort((a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    const userId = (session.user as any).id;
+    const userSearches = savedSearches.get(userId) || [];
 
-    return NextResponse.json(sortedSearches);
+    return NextResponse.json({ savedSearches: userSearches });
   } catch (error) {
     console.error('Error fetching saved searches:', error);
     return NextResponse.json(
@@ -31,36 +55,50 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, criteria, notifications } = await request.json();
-
-    if (!name || !criteria) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
-        { error: 'Name and criteria are required' },
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const userId = (session.user as any).id;
+    const { name, filters, emailAlerts, alertFrequency } = await request.json();
+
+    // Validate required fields
+    if (!name || !filters) {
+      return NextResponse.json(
+        { error: 'Name and filters are required' },
         { status: 400 }
       );
     }
 
-    // Create new saved search
-    const newSearch = {
-      id: Date.now().toString(),
+    const newSearch: SavedSearch = {
+      id: Math.random().toString(36).substr(2, 9),
+      userId,
       name,
-      criteria,
-      notifications: notifications ?? true,
+      filters,
+      emailAlerts: emailAlerts || false,
+      alertFrequency: alertFrequency || 'weekly',
       createdAt: new Date().toISOString(),
+      lastRunAt: new Date().toISOString(),
     };
 
-    // Get or initialize user's saved searches
-    let userSearches = mockSavedSearches.get(MOCK_USER_ID) || [];
-    
-    // Add new search
-    userSearches = [...userSearches, newSearch];
-    mockSavedSearches.set(MOCK_USER_ID, userSearches);
+    const userSearches = savedSearches.get(userId) || [];
+    userSearches.push(newSearch);
+    savedSearches.set(userId, userSearches);
+
+    // In a real application, you would:
+    // 1. Save to database
+    // 2. Set up email alert schedule if enabled
+    // 3. Create initial property matches baseline
 
     return NextResponse.json(newSearch);
   } catch (error) {
-    console.error('Error saving search:', error);
+    console.error('Error creating saved search:', error);
     return NextResponse.json(
-      { error: 'Failed to save search' },
+      { error: 'Failed to create saved search' },
       { status: 500 }
     );
   }
