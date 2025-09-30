@@ -1,39 +1,44 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { wishlistService } from '@/lib/wishlistService';
-import { UpdatePriceAlertRequest } from '@/types/wishlist';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
+// Reference to mock data from parent route
+declare const mockProperties: Map<string, any>;
+declare const mockPriceAlerts: Map<string, any[]>;
+declare const MOCK_USER_ID: string;
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const body = await request.json();
-    const { userId, ...updateData } = body;
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      );
-    }
-
-    const response = await wishlistService.updatePriceAlert(
-      params.id,
-      updateData as UpdatePriceAlertRequest,
-      userId
+    const updates = await request.json();
+    const userAlerts = mockPriceAlerts.get(MOCK_USER_ID) || [];
+    
+    const alertIndex = userAlerts.findIndex(
+      alert => alert.id === params.id
     );
 
-    if (!response.success) {
+    if (alertIndex === -1) {
       return NextResponse.json(
-        { error: response.message },
-        { status: 400 }
+        { error: 'Price alert not found' },
+        { status: 404 }
       );
     }
 
-    return NextResponse.json(response);
+    // Update alert
+    const updatedAlert = {
+      ...userAlerts[alertIndex],
+      ...updates,
+    };
+
+    userAlerts[alertIndex] = updatedAlert;
+    mockPriceAlerts.set(MOCK_USER_ID, userAlerts);
+
+    // Return with property details
+    return NextResponse.json({
+      ...updatedAlert,
+      property: mockProperties.get(updatedAlert.propertyId),
+    });
   } catch (error) {
     console.error('Error updating price alert:', error);
     return NextResponse.json(
@@ -43,28 +48,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
+    const userAlerts = mockPriceAlerts.get(MOCK_USER_ID) || [];
+    
+    const alertIndex = userAlerts.findIndex(
+      alert => alert.id === params.id
+    );
 
-    if (!userId) {
+    if (alertIndex === -1) {
       return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      );
-    }
-
-    const response = await wishlistService.deletePriceAlert(params.id, userId);
-
-    if (!response.success) {
-      return NextResponse.json(
-        { error: response.message },
+        { error: 'Price alert not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(response);
+    // Remove alert
+    userAlerts.splice(alertIndex, 1);
+    mockPriceAlerts.set(MOCK_USER_ID, userAlerts);
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting price alert:', error);
     return NextResponse.json(

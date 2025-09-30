@@ -1,108 +1,38 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { comparisonService } from '@/lib/comparisonService';
-import { UpdateComparisonRequest, AddPropertyToComparisonRequest, RemovePropertyFromComparisonRequest } from '@/types/comparison';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      );
-    }
-
-    const response = await comparisonService.getComparison(params.id, userId);
-
-    if (!response.success) {
-      return NextResponse.json(
-        { error: response.message },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error fetching comparison:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch comparison' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const body = await request.json();
-    const { userId, ...updateData } = body;
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      );
-    }
-
-    const response = await comparisonService.updateComparison(
-      params.id,
-      updateData as UpdateComparisonRequest,
-      userId
-    );
-
-    if (!response.success) {
-      return NextResponse.json(
-        { error: response.message },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error updating comparison:', error);
-    return NextResponse.json(
-      { error: 'Failed to update comparison' },
-      { status: 500 }
-    );
-  }
-}
+// Reference to mock data from parent route
+declare const mockProperties: Map<string, any>;
+declare const mockComparisonLists: Map<string, Set<string>>;
+declare const MOCK_USER_ID: string;
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
+    const userComparison = mockComparisonLists.get(MOCK_USER_ID);
+    
+    if (!userComparison) {
       return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      );
-    }
-
-    const response = await comparisonService.deleteComparison(params.id, userId);
-
-    if (!response.success) {
-      return NextResponse.json(
-        { error: response.message },
+        { error: 'Comparison list not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(response);
+    // Remove from comparison
+    userComparison.delete(params.id);
+
+    // Return updated list with full property details
+    const properties = Array.from(userComparison)
+      .map(id => mockProperties.get(id))
+      .filter(Boolean);
+
+    return NextResponse.json(properties);
   } catch (error) {
-    console.error('Error deleting comparison:', error);
+    console.error('Error removing from comparison:', error);
     return NextResponse.json(
-      { error: 'Failed to delete comparison' },
+      { error: 'Failed to remove from comparison' },
       { status: 500 }
     );
   }
