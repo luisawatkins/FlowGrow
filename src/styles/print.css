@@ -1,0 +1,82 @@
+/* Print-specific styles */
+@media print {
+  /* Hide non-printable elements */
+  .no-print,
+  nav,
+  footer,
+  button,
+  .chakra-modal__close-btn {
+    display: none !important;
+  }
+
+  /* Reset page margins */
+  @page {
+    margin: 0.5cm;
+  }
+
+  /* Basic page setup */
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+    color: black;
+  }
+
+  /* Container styles */
+  .printable-view {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    background: white !important;
+  }
+
+  /* Typography adjustments */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+
+  p, h2, h3 {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Image handling */
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  /* Table handling */
+  table {
+    page-break-inside: avoid;
+  }
+
+  /* Link handling */
+  a {
+    text-decoration: none !important;
+    color: black !important;
+  }
+
+  /* Force background colors and images */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Break rules */
+  .page-break {
+    page-break-before: always;
+  }
+
+  /* Grid adjustments */
+  .chakra-grid {
+    display: block !important;
+  }
+
+  .chakra-grid > * {
+    margin-bottom: 20px !important;
+  }
+}
