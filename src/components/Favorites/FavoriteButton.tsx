@@ -1,64 +1,95 @@
-import React from 'react';
-import {
-  IconButton,
-  Icon,
-  Tooltip,
-  useToast,
-} from '@chakra-ui/react';
+import React, { useState, useEffect } from 'react';
+import { IconButton, useToast } from '@chakra-ui/react';
 import { FaHeart, FaRegHeart } from 'react-icons/fa';
-import { useFavorites } from '@/hooks/useFavorites';
+import { useSession } from 'next-auth/react';
 
 interface FavoriteButtonProps {
   propertyId: string;
-  size?: 'sm' | 'md' | 'lg';
-  variant?: 'solid' | 'ghost' | 'outline';
+  initialIsFavorite?: boolean;
 }
 
 export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
   propertyId,
-  size = 'md',
-  variant = 'ghost',
+  initialIsFavorite = false,
 }) => {
-  const { favorites, toggleFavorite, isLoading } = useFavorites();
+  const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
+  const [isLoading, setIsLoading] = useState(false);
+  const { data: session } = useSession();
   const toast = useToast();
 
-  const isFavorite = favorites.includes(propertyId);
+  useEffect(() => {
+    const checkFavoriteStatus = async () => {
+      if (!session?.user) return;
 
-  const handleToggle = async () => {
-    try {
-      await toggleFavorite(propertyId);
+      try {
+        const response = await fetch(`/api/favorites/${propertyId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setIsFavorite(data.isFavorite);
+        }
+      } catch (error) {
+        console.error('Error checking favorite status:', error);
+      }
+    };
+
+    checkFavoriteStatus();
+  }, [propertyId, session]);
+
+  const handleToggleFavorite = async () => {
+    if (!session?.user) {
       toast({
-        title: isFavorite ? 'Removed from favorites' : 'Added to favorites',
+        title: 'Authentication Required',
+        description: 'Please sign in to save favorites',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const method = isFavorite ? 'DELETE' : 'POST';
+      const response = await fetch(`/api/favorites/${propertyId}`, {
+        method,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update favorite status');
+      }
+
+      setIsFavorite(!isFavorite);
+      toast({
+        title: isFavorite ? 'Removed from Favorites' : 'Added to Favorites',
         status: 'success',
         duration: 2000,
+        isClosable: true,
       });
     } catch (error) {
       toast({
-        title: 'Failed to update favorites',
+        title: 'Error',
+        description: 'Failed to update favorite status',
         status: 'error',
         duration: 3000,
+        isClosable: true,
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <Tooltip
-      label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-      placement="top"
-    >
-      <IconButton
-        aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        icon={
-          <Icon
-            as={isFavorite ? FaHeart : FaRegHeart}
-            color={isFavorite ? 'red.500' : 'gray.500'}
-          />
-        }
-        onClick={handleToggle}
-        isLoading={isLoading}
-        size={size}
-        variant={variant}
-      />
-    </Tooltip>
+    <IconButton
+      aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      icon={isFavorite ? <FaHeart /> : <FaRegHeart />}
+      colorScheme={isFavorite ? 'red' : 'gray'}
+      variant="ghost"
+      isLoading={isLoading}
+      onClick={handleToggleFavorite}
+      _hover={{
+        transform: 'scale(1.1)',
+      }}
+      transition="all 0.2s"
+    />
   );
 };
