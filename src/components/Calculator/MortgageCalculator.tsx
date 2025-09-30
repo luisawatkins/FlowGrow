@@ -1,279 +1,393 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
-  VStack,
-  HStack,
+  Button,
   FormControl,
   FormLabel,
+  Grid,
+  GridItem,
+  Heading,
   Input,
-  InputGroup,
-  InputLeftElement,
-  InputRightElement,
-  Slider,
-  SliderTrack,
-  SliderFilledTrack,
-  SliderThumb,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
+  Stack,
   Text,
+  VStack,
   Stat,
   StatLabel,
   StatNumber,
-  StatHelpText,
-  Grid,
-  GridItem,
-  Button,
-  Select,
-  Divider,
+  StatGroup,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  useToast,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
 } from '@chakra-ui/react';
-import { useMortgageCalculator } from '@/hooks/useMortgageCalculator';
 
 interface MortgageCalculatorProps {
   propertyPrice?: number;
 }
 
-export const MortgageCalculator: React.FC<MortgageCalculatorProps> = ({
-  propertyPrice = 300000,
-}) => {
-  const {
-    calculateMortgage,
-    calculateAmortization,
-    isLoading,
-  } = useMortgageCalculator();
+interface MortgagePayment {
+  principal: number;
+  interest: number;
+  propertyTax: number;
+  homeInsurance: number;
+  pmi: number;
+  hoa: number;
+  total: number;
+}
 
-  const [inputs, setInputs] = useState({
-    price: propertyPrice,
-    downPayment: propertyPrice * 0.2, // 20% default down payment
+interface AmortizationSchedule {
+  month: number;
+  payment: number;
+  principal: number;
+  interest: number;
+  balance: number;
+}
+
+interface CalculationResult {
+  payment: MortgagePayment;
+  schedule: AmortizationSchedule[];
+  summary: {
+    totalPayments: number;
+    totalInterest: number;
+    totalCost: number;
+  };
+}
+
+export const MortgageCalculator: React.FC<MortgageCalculatorProps> = ({
+  propertyPrice = 0,
+}) => {
+  const toast = useToast();
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [result, setResult] = useState<CalculationResult | null>(null);
+
+  const [formData, setFormData] = useState({
+    propertyPrice,
+    downPayment: propertyPrice * 0.2, // 20% down payment
     interestRate: 3.5,
     loanTerm: 30,
-    propertyTax: 2400,
-    insurance: 1200,
+    propertyTax: propertyPrice * 0.01, // 1% property tax
+    homeInsurance: 1200, // $1,200/year
     pmi: 0,
+    hoa: 0,
   });
 
-  const [results, setResults] = useState({
-    monthlyPayment: 0,
-    totalPayment: 0,
-    principalAndInterest: 0,
-    monthlyTax: 0,
-    monthlyInsurance: 0,
-    monthlyPMI: 0,
-  });
+  const handleInputChange = (field: string, value: number) => {
+    setFormData((prev) => {
+      const newData = { ...prev, [field]: value };
 
-  useEffect(() => {
-    handleCalculate();
-  }, []);
+      // Update dependent fields
+      if (field === 'propertyPrice') {
+        newData.downPayment = value * 0.2;
+        newData.propertyTax = value * 0.01;
+      }
 
-  const handleInputChange = (
-    field: keyof typeof inputs,
-    value: string | number
-  ) => {
-    let newValue = typeof value === 'string' ? parseFloat(value) : value;
-    
-    // Handle special cases
-    if (field === 'downPayment') {
-      newValue = Math.min(newValue, inputs.price);
-    }
-    
-    setInputs(prev => ({
-      ...prev,
-      [field]: newValue,
-      // Recalculate PMI if down payment is less than 20%
-      pmi: field === 'downPayment' && (newValue / inputs.price) < 0.2
-        ? (inputs.price - newValue) * 0.01 / 12 // Rough PMI calculation
-        : prev.pmi,
-    }));
+      // Calculate PMI if down payment is less than 20%
+      const downPaymentPercent = (newData.downPayment / newData.propertyPrice) * 100;
+      newData.pmi = downPaymentPercent < 20 ? (newData.propertyPrice - newData.downPayment) * 0.005 : 0;
+
+      return newData;
+    });
   };
 
-  const handleCalculate = async () => {
+  const calculateMortgage = async () => {
+    setIsCalculating(true);
     try {
-      const mortgageResults = await calculateMortgage({
-        loanAmount: inputs.price - inputs.downPayment,
-        interestRate: inputs.interestRate,
-        loanTerm: inputs.loanTerm,
-        propertyTax: inputs.propertyTax,
-        insurance: inputs.insurance,
-        pmi: inputs.pmi,
+      const response = await fetch('/api/mortgage-calculator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
       });
 
-      setResults(mortgageResults);
+      if (!response.ok) {
+        throw new Error('Failed to calculate mortgage');
+      }
+
+      const data = await response.json();
+      setResult(data);
     } catch (error) {
-      console.error('Error calculating mortgage:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to calculate mortgage. Please try again.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsCalculating(false);
     }
   };
 
-  const downPaymentPercentage = (inputs.downPayment / inputs.price) * 100;
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount);
 
   return (
-    <Box
-      borderWidth="1px"
-      borderRadius="lg"
-      p={6}
-      bg="white"
-      shadow="sm"
-    >
-      <VStack spacing={6} align="stretch">
-        {/* Property Price */}
-        <FormControl>
-          <FormLabel>Property Price</FormLabel>
-          <InputGroup>
-            <InputLeftElement color="gray.500">$</InputLeftElement>
-            <Input
-              type="number"
-              value={inputs.price}
-              onChange={(e) => handleInputChange('price', e.target.value)}
-            />
-          </InputGroup>
-        </FormControl>
+    <Box>
+      <VStack spacing={8} align="stretch">
+        <Grid templateColumns="repeat(2, 1fr)" gap={6}>
+          <GridItem>
+            <FormControl>
+              <FormLabel>Property Price</FormLabel>
+              <NumberInput
+                value={formData.propertyPrice}
+                onChange={(_, value) => handleInputChange('propertyPrice', value)}
+                min={0}
+                step={1000}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+            </FormControl>
+          </GridItem>
 
-        {/* Down Payment */}
-        <FormControl>
-          <FormLabel>Down Payment</FormLabel>
-          <VStack spacing={2} align="stretch">
-            <InputGroup>
-              <InputLeftElement color="gray.500">$</InputLeftElement>
-              <Input
-                type="number"
-                value={inputs.downPayment}
-                onChange={(e) => handleInputChange('downPayment', e.target.value)}
-              />
-              <InputRightElement width="4.5rem">
-                <Text fontSize="sm" color="gray.500">
-                  {downPaymentPercentage.toFixed(1)}%
-                </Text>
-              </InputRightElement>
-            </InputGroup>
-            <Slider
-              value={downPaymentPercentage}
-              min={0}
-              max={100}
-              step={1}
-              onChange={(value) =>
-                handleInputChange('downPayment', (inputs.price * value) / 100)
-              }
-            >
-              <SliderTrack>
-                <SliderFilledTrack />
-              </SliderTrack>
-              <SliderThumb />
-            </Slider>
-          </VStack>
-        </FormControl>
+          <GridItem>
+            <FormControl>
+              <FormLabel>Down Payment</FormLabel>
+              <NumberInput
+                value={formData.downPayment}
+                onChange={(_, value) => handleInputChange('downPayment', value)}
+                min={0}
+                max={formData.propertyPrice}
+                step={1000}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+              <Text fontSize="sm" color="gray.600">
+                {((formData.downPayment / formData.propertyPrice) * 100).toFixed(1)}% of property price
+              </Text>
+            </FormControl>
+          </GridItem>
 
-        {/* Interest Rate */}
-        <FormControl>
-          <FormLabel>Interest Rate</FormLabel>
-          <InputGroup>
-            <Input
-              type="number"
-              value={inputs.interestRate}
-              onChange={(e) => handleInputChange('interestRate', e.target.value)}
-              step={0.1}
-            />
-            <InputRightElement>%</InputRightElement>
-          </InputGroup>
-        </FormControl>
+          <GridItem>
+            <FormControl>
+              <FormLabel>Interest Rate (%)</FormLabel>
+              <NumberInput
+                value={formData.interestRate}
+                onChange={(_, value) => handleInputChange('interestRate', value)}
+                min={0}
+                max={20}
+                step={0.125}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+            </FormControl>
+          </GridItem>
 
-        {/* Loan Term */}
-        <FormControl>
-          <FormLabel>Loan Term</FormLabel>
-          <Select
-            value={inputs.loanTerm}
-            onChange={(e) => handleInputChange('loanTerm', e.target.value)}
-          >
-            <option value={15}>15 years</option>
-            <option value={20}>20 years</option>
-            <option value={30}>30 years</option>
-          </Select>
-        </FormControl>
+          <GridItem>
+            <FormControl>
+              <FormLabel>Loan Term (years)</FormLabel>
+              <NumberInput
+                value={formData.loanTerm}
+                onChange={(_, value) => handleInputChange('loanTerm', value)}
+                min={1}
+                max={30}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+            </FormControl>
+          </GridItem>
 
-        {/* Property Tax */}
-        <FormControl>
-          <FormLabel>Annual Property Tax</FormLabel>
-          <InputGroup>
-            <InputLeftElement color="gray.500">$</InputLeftElement>
-            <Input
-              type="number"
-              value={inputs.propertyTax}
-              onChange={(e) => handleInputChange('propertyTax', e.target.value)}
-            />
-          </InputGroup>
-        </FormControl>
+          <GridItem>
+            <FormControl>
+              <FormLabel>Property Tax (yearly)</FormLabel>
+              <NumberInput
+                value={formData.propertyTax}
+                onChange={(_, value) => handleInputChange('propertyTax', value)}
+                min={0}
+                step={100}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+            </FormControl>
+          </GridItem>
 
-        {/* Insurance */}
-        <FormControl>
-          <FormLabel>Annual Insurance</FormLabel>
-          <InputGroup>
-            <InputLeftElement color="gray.500">$</InputLeftElement>
-            <Input
-              type="number"
-              value={inputs.insurance}
-              onChange={(e) => handleInputChange('insurance', e.target.value)}
-            />
-          </InputGroup>
-        </FormControl>
+          <GridItem>
+            <FormControl>
+              <FormLabel>Home Insurance (yearly)</FormLabel>
+              <NumberInput
+                value={formData.homeInsurance}
+                onChange={(_, value) => handleInputChange('homeInsurance', value)}
+                min={0}
+                step={100}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+            </FormControl>
+          </GridItem>
+
+          <GridItem>
+            <FormControl>
+              <FormLabel>PMI (yearly)</FormLabel>
+              <NumberInput
+                value={formData.pmi}
+                onChange={(_, value) => handleInputChange('pmi', value)}
+                min={0}
+                step={100}
+                isReadOnly
+              >
+                <NumberInputField />
+              </NumberInput>
+            </FormControl>
+          </GridItem>
+
+          <GridItem>
+            <FormControl>
+              <FormLabel>HOA Fees (monthly)</FormLabel>
+              <NumberInput
+                value={formData.hoa}
+                onChange={(_, value) => handleInputChange('hoa', value)}
+                min={0}
+                step={10}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+            </FormControl>
+          </GridItem>
+        </Grid>
 
         <Button
           colorScheme="blue"
           size="lg"
-          onClick={handleCalculate}
-          isLoading={isLoading}
+          onClick={calculateMortgage}
+          isLoading={isCalculating}
         >
-          Calculate
+          Calculate Mortgage
         </Button>
 
-        <Divider />
+        {result && (
+          <Tabs>
+            <TabList>
+              <Tab>Monthly Payment</Tab>
+              <Tab>Amortization Schedule</Tab>
+            </TabList>
 
-        {/* Results */}
-        <Grid templateColumns="repeat(2, 1fr)" gap={6}>
-          <GridItem colSpan={2}>
-            <Stat>
-              <StatLabel>Monthly Payment</StatLabel>
-              <StatNumber>${results.monthlyPayment.toFixed(2)}</StatNumber>
-              <StatHelpText>Principal, Interest, Tax & Insurance</StatHelpText>
-            </Stat>
-          </GridItem>
+            <TabPanels>
+              <TabPanel>
+                <VStack spacing={6} align="stretch">
+                  <StatGroup>
+                    <Stat>
+                      <StatLabel>Monthly Payment</StatLabel>
+                      <StatNumber>{formatCurrency(result.payment.total)}</StatNumber>
+                    </Stat>
+                    <Stat>
+                      <StatLabel>Total Cost</StatLabel>
+                      <StatNumber>{formatCurrency(result.summary.totalCost)}</StatNumber>
+                    </Stat>
+                    <Stat>
+                      <StatLabel>Total Interest</StatLabel>
+                      <StatNumber>{formatCurrency(result.summary.totalInterest)}</StatNumber>
+                    </Stat>
+                  </StatGroup>
 
-          <GridItem>
-            <Stat>
-              <StatLabel>Principal & Interest</StatLabel>
-              <StatNumber>${results.principalAndInterest.toFixed(2)}</StatNumber>
-              <StatHelpText>Monthly</StatHelpText>
-            </Stat>
-          </GridItem>
+                  <Box>
+                    <Heading size="sm" mb={4}>Payment Breakdown</Heading>
+                    <Table size="sm">
+                      <Tbody>
+                        <Tr>
+                          <Td>Principal & Interest</Td>
+                          <Td isNumeric>
+                            {formatCurrency(result.payment.principal + result.payment.interest)}
+                          </Td>
+                        </Tr>
+                        <Tr>
+                          <Td>Property Tax</Td>
+                          <Td isNumeric>{formatCurrency(result.payment.propertyTax)}</Td>
+                        </Tr>
+                        <Tr>
+                          <Td>Home Insurance</Td>
+                          <Td isNumeric>{formatCurrency(result.payment.homeInsurance)}</Td>
+                        </Tr>
+                        {result.payment.pmi > 0 && (
+                          <Tr>
+                            <Td>PMI</Td>
+                            <Td isNumeric>{formatCurrency(result.payment.pmi)}</Td>
+                          </Tr>
+                        )}
+                        {result.payment.hoa > 0 && (
+                          <Tr>
+                            <Td>HOA Fees</Td>
+                            <Td isNumeric>{formatCurrency(result.payment.hoa)}</Td>
+                          </Tr>
+                        )}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                </VStack>
+              </TabPanel>
 
-          <GridItem>
-            <Stat>
-              <StatLabel>Property Tax</StatLabel>
-              <StatNumber>${results.monthlyTax.toFixed(2)}</StatNumber>
-              <StatHelpText>Monthly</StatHelpText>
-            </Stat>
-          </GridItem>
-
-          <GridItem>
-            <Stat>
-              <StatLabel>Insurance</StatLabel>
-              <StatNumber>${results.monthlyInsurance.toFixed(2)}</StatNumber>
-              <StatHelpText>Monthly</StatHelpText>
-            </Stat>
-          </GridItem>
-
-          {results.monthlyPMI > 0 && (
-            <GridItem>
-              <Stat>
-                <StatLabel>PMI</StatLabel>
-                <StatNumber>${results.monthlyPMI.toFixed(2)}</StatNumber>
-                <StatHelpText>Monthly</StatHelpText>
-              </Stat>
-            </GridItem>
-          )}
-
-          <GridItem colSpan={2}>
-            <Stat>
-              <StatLabel>Total Payment</StatLabel>
-              <StatNumber>${results.totalPayment.toFixed(2)}</StatNumber>
-              <StatHelpText>Over {inputs.loanTerm} years</StatHelpText>
-            </Stat>
-          </GridItem>
-        </Grid>
+              <TabPanel>
+                <Box overflowX="auto">
+                  <Table size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th>Month</Th>
+                        <Th isNumeric>Payment</Th>
+                        <Th isNumeric>Principal</Th>
+                        <Th isNumeric>Interest</Th>
+                        <Th isNumeric>Balance</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {result.schedule.map((month) => (
+                        <Tr key={month.month}>
+                          <Td>{month.month}</Td>
+                          <Td isNumeric>{formatCurrency(month.payment)}</Td>
+                          <Td isNumeric>{formatCurrency(month.principal)}</Td>
+                          <Td isNumeric>{formatCurrency(month.interest)}</Td>
+                          <Td isNumeric>{formatCurrency(month.balance)}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </Box>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
+        )}
       </VStack>
     </Box>
   );

@@ -1,119 +1,278 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
+  Button,
+  Input,
   VStack,
   HStack,
-  Input,
-  IconButton,
   Text,
   Avatar,
-  Badge,
-  Divider,
+  IconButton,
   useToast,
   Spinner,
+  Divider,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Badge,
+  Image,
+  Tooltip,
 } from '@chakra-ui/react';
 import {
   FaPaperPlane,
   FaPaperclip,
   FaImage,
-  FaSmile,
+  FaFile,
+  FaEllipsisV,
+  FaDownload,
+  FaCheck,
+  FaCheckDouble,
 } from 'react-icons/fa';
-import { useChat } from '@/hooks/useChat';
+import { useSession } from 'next-auth/react';
+import type {
+  ChatMessage,
+  ChatConversation,
+} from '@/app/api/chat/messages/route';
 
 interface ChatWindowProps {
-  agentId: string;
-  propertyId?: string;
+  conversationId: string;
+  onClose?: () => void;
 }
 
-interface Message {
-  id: string;
-  senderId: string;
-  senderType: 'user' | 'agent';
-  content: string;
-  timestamp: string;
-  status: 'sent' | 'delivered' | 'read';
-  attachments?: Array<{
-    id: string;
-    type: 'image' | 'document';
-    url: string;
-    name: string;
-  }>;
-}
-
-export const ChatWindow: React.FC<ChatWindowProps> = ({
-  agentId,
-  propertyId,
-}) => {
-  const [message, setMessage] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+const MessageBubble: React.FC<{
+  message: ChatMessage;
+  isOwnMessage: boolean;
+}> = ({ message, isOwnMessage }) => {
   const toast = useToast();
 
-  const {
-    messages,
-    agent,
-    isLoading,
-    isTyping,
-    sendMessage,
-    uploadAttachment,
-  } = useChat(agentId);
+  const handleDownload = async (url: string, name: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to download file',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  return (
+    <Box
+      alignSelf={isOwnMessage ? 'flex-end' : 'flex-start'}
+      maxW="70%"
+      mb={4}
+    >
+      {!isOwnMessage && (
+        <HStack mb={1}>
+          <Avatar
+            size="xs"
+            name={message.senderName}
+            src={message.senderImage}
+          />
+          <Text fontSize="sm" color="gray.600">
+            {message.senderName}
+          </Text>
+        </HStack>
+      )}
+
+      <Box
+        bg={isOwnMessage ? 'blue.500' : 'gray.100'}
+        color={isOwnMessage ? 'white' : 'black'}
+        p={3}
+        borderRadius="lg"
+        position="relative"
+      >
+        <Text>{message.content}</Text>
+
+        {message.attachments && message.attachments.length > 0 && (
+          <VStack mt={2} align="stretch" spacing={2}>
+            {message.attachments.map((attachment, index) => (
+              <Box
+                key={index}
+                borderRadius="md"
+                overflow="hidden"
+                bg={isOwnMessage ? 'blue.600' : 'gray.200'}
+                p={2}
+              >
+                {attachment.type === 'image' ? (
+                  <Image
+                    src={attachment.url}
+                    alt={attachment.name}
+                    maxH="200px"
+                    objectFit="cover"
+                    cursor="pointer"
+                    onClick={() => window.open(attachment.url)}
+                  />
+                ) : (
+                  <HStack justify="space-between">
+                    <HStack>
+                      <FaFile />
+                      <Text>{attachment.name}</Text>
+                    </HStack>
+                    <IconButton
+                      aria-label="Download file"
+                      icon={<FaDownload />}
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        handleDownload(attachment.url, attachment.name)
+                      }
+                    />
+                  </HStack>
+                )}
+              </Box>
+            ))}
+          </VStack>
+        )}
+
+        <HStack
+          position="absolute"
+          bottom="-20px"
+          right={isOwnMessage ? 0 : 'auto'}
+          left={isOwnMessage ? 'auto' : 0}
+          spacing={1}
+        >
+          <Text fontSize="xs" color="gray.500">
+            {new Date(message.createdAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </Text>
+          {isOwnMessage && (
+            <Icon
+              as={message.isRead ? FaCheckDouble : FaCheck}
+              color={message.isRead ? 'blue.500' : 'gray.500'}
+              boxSize={3}
+            />
+          )}
+        </HStack>
+      </Box>
+    </Box>
+  );
+};
+
+export const ChatWindow: React.FC<ChatWindowProps> = ({
+  conversationId,
+  onClose,
+}) => {
+  const { data: session } = useSession();
+  const toast = useToast();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [conversation, setConversation] = useState<ChatConversation | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [attachments, setAttachments] = useState<
+    { type: 'image' | 'document'; url: string; name: string }[]
+  >([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
-    scrollToBottom();
+    const fetchMessages = async () => {
+      try {
+        const response = await fetch(
+          `/api/chat/messages?conversationId=${conversationId}`
+        );
+        if (!response.ok) {
+          throw new Error('Failed to fetch messages');
+        }
+
+        const data = await response.json();
+        setMessages(data.messages);
+        setConversation(data.conversation);
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load messages',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMessages();
+
+    // In a real application, set up WebSocket connection here
+    // const ws = new WebSocket('ws://your-websocket-url');
+    // ws.onmessage = (event) => {
+    //   const message = JSON.parse(event.data);
+    //   setMessages((prev) => [...prev, message]);
+    // };
+    // return () => ws.close();
+  }, [conversationId, toast]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() && attachments.length === 0) return;
 
-  const handleSend = async () => {
-    if (!message.trim()) return;
-
+    setIsSending(true);
     try {
-      await sendMessage({
-        content: message,
-        propertyId,
+      const response = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId,
+          content: newMessage.trim(),
+          attachments: attachments.length > 0 ? attachments : undefined,
+        }),
       });
-      setMessage('');
+
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+
+      const message = await response.json();
+      setMessages((prev) => [...prev, message]);
+      setNewMessage('');
+      setAttachments([]);
     } catch (error) {
       toast({
-        title: 'Failed to send message',
+        title: 'Error',
+        description: 'Failed to send message',
         status: 'error',
         duration: 3000,
+        isClosable: true,
       });
+    } finally {
+      setIsSending(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    try {
-      const file = files[0];
-      await uploadAttachment(file);
-      
-      toast({
-        title: 'File uploaded successfully',
-        status: 'success',
-        duration: 2000,
-      });
-    } catch (error) {
-      toast({
-        title: 'Failed to upload file',
-        status: 'error',
-        duration: 3000,
-      });
-    }
-
-    // Clear the input
-    e.target.value = '';
+  const handleFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'image' | 'document'
+  ) => {
+    const files = Array.from(e.target.files || []);
+    // In a real app, upload to cloud storage and get URLs
+    const newAttachments = files.map((file) => ({
+      type,
+      url: URL.createObjectURL(file),
+      name: file.name,
+    }));
+    setAttachments((prev) => [...prev, ...newAttachments]);
+    e.target.value = ''; // Reset input
   };
 
   if (isLoading) {
@@ -124,161 +283,196 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         alignItems="center"
         justifyContent="center"
       >
-        <Spinner />
+        <Spinner size="xl" />
       </Box>
     );
   }
 
+  if (!conversation) {
+    return (
+      <Box
+        height="600px"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+      >
+        <Text>Conversation not found</Text>
+      </Box>
+    );
+  }
+
+  const otherParticipant = conversation.participants.find(
+    (p) => p.id !== (session?.user as any)?.id
+  );
+
   return (
-    <Box
-      borderWidth="1px"
-      borderRadius="lg"
-      overflow="hidden"
-      bg="white"
-      height="600px"
-      display="flex"
-      flexDirection="column"
-    >
+    <Box height="600px" display="flex" flexDirection="column">
       {/* Header */}
       <HStack
         p={4}
-        borderBottomWidth="1px"
-        bg="gray.50"
-        spacing={4}
+        bg="white"
+        borderBottom="1px"
+        borderColor="gray.200"
+        justify="space-between"
       >
-        <Avatar
-          size="sm"
-          name={agent?.name}
-          src={agent?.avatarUrl}
-        />
-        <VStack align="start" spacing={0} flex={1}>
-          <Text fontWeight="bold">{agent?.name}</Text>
-          <HStack>
-            <Badge
-              colorScheme={agent?.isOnline ? 'green' : 'gray'}
-              variant="subtle"
+        <HStack>
+          <Avatar
+            size="sm"
+            name={otherParticipant?.name}
+            src={otherParticipant?.image}
+          />
+          <Box>
+            <Text fontWeight="bold">{otherParticipant?.name}</Text>
+            <Text fontSize="sm" color="gray.600">
+              {otherParticipant?.role === 'agent' ? 'Real Estate Agent' : 'User'}
+            </Text>
+          </Box>
+        </HStack>
+
+        <HStack>
+          {conversation.propertyId && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                window.location.href = `/properties/${conversation.propertyId}`
+              }
             >
-              {agent?.isOnline ? 'Online' : 'Offline'}
-            </Badge>
-            {agent?.role && (
-              <Badge colorScheme="blue" variant="subtle">
-                {agent.role}
-              </Badge>
-            )}
-          </HStack>
-        </VStack>
+              View Property
+            </Button>
+          )}
+          <Menu>
+            <MenuButton
+              as={IconButton}
+              icon={<FaEllipsisV />}
+              variant="ghost"
+              aria-label="More options"
+            />
+            <MenuList>
+              <MenuItem onClick={() => window.print()}>Print Chat</MenuItem>
+              <MenuItem onClick={onClose}>Close Chat</MenuItem>
+            </MenuList>
+          </Menu>
+        </HStack>
       </HStack>
 
       {/* Messages */}
       <VStack
         flex={1}
         overflowY="auto"
-        spacing={4}
         p={4}
+        spacing={0}
         align="stretch"
+        bg="gray.50"
       >
-        {messages.map((msg: Message) => (
-          <Box
-            key={msg.id}
-            alignSelf={msg.senderType === 'user' ? 'flex-end' : 'flex-start'}
-            maxW="70%"
-          >
-            <Box
-              bg={msg.senderType === 'user' ? 'blue.500' : 'gray.100'}
-              color={msg.senderType === 'user' ? 'white' : 'black'}
-              p={3}
-              borderRadius="lg"
-              position="relative"
-            >
-              <Text>{msg.content}</Text>
-              
-              {msg.attachments && msg.attachments.length > 0 && (
-                <VStack mt={2} align="stretch">
-                  {msg.attachments.map(attachment => (
-                    <Box
-                      key={attachment.id}
-                      borderWidth="1px"
-                      borderRadius="md"
-                      p={2}
-                      bg={msg.senderType === 'user' ? 'blue.600' : 'white'}
-                    >
-                      <HStack>
-                        <Icon
-                          as={attachment.type === 'image' ? FaImage : FaPaperclip}
-                        />
-                        <Text fontSize="sm">{attachment.name}</Text>
-                      </HStack>
-                    </Box>
-                  ))}
-                </VStack>
-              )}
-            </Box>
-            
-            <Text
-              fontSize="xs"
-              color="gray.500"
-              mt={1}
-              textAlign={msg.senderType === 'user' ? 'right' : 'left'}
-            >
-              {new Date(msg.timestamp).toLocaleTimeString()}
-              {msg.senderType === 'user' && (
-                <Text as="span" ml={2}>
-                  {msg.status === 'read' ? '✓✓' : '✓'}
-                </Text>
-              )}
-            </Text>
-          </Box>
+        {messages.map((message) => (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            isOwnMessage={message.senderId === (session?.user as any)?.id}
+          />
         ))}
-
-        {isTyping && (
-          <HStack spacing={2} alignSelf="flex-start">
-            <Avatar size="xs" name={agent?.name} src={agent?.avatarUrl} />
-            <Text fontSize="sm" color="gray.500">
-              {agent?.name} is typing...
-            </Text>
-          </HStack>
-        )}
-
         <div ref={messagesEndRef} />
       </VStack>
 
-      <Divider />
+      {/* Attachments Preview */}
+      {attachments.length > 0 && (
+        <HStack p={2} bg="gray.100" overflowX="auto">
+          {attachments.map((attachment, index) => (
+            <Box
+              key={index}
+              position="relative"
+              borderRadius="md"
+              overflow="hidden"
+            >
+              {attachment.type === 'image' ? (
+                <Image
+                  src={attachment.url}
+                  alt={attachment.name}
+                  height="60px"
+                  width="60px"
+                  objectFit="cover"
+                />
+              ) : (
+                <Box
+                  height="60px"
+                  width="60px"
+                  bg="gray.200"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                >
+                  <FaFile size={24} />
+                </Box>
+              )}
+              <IconButton
+                aria-label="Remove attachment"
+                icon={<FaCheck />}
+                size="xs"
+                position="absolute"
+                top={1}
+                right={1}
+                colorScheme="red"
+                onClick={() =>
+                  setAttachments((prev) =>
+                    prev.filter((_, i) => i !== index)
+                  )
+                }
+              />
+            </Box>
+          ))}
+        </HStack>
+      )}
 
       {/* Input */}
-      <HStack p={4} spacing={2}>
+      <HStack p={4} bg="white" borderTop="1px" borderColor="gray.200">
         <input
           type="file"
           ref={fileInputRef}
           style={{ display: 'none' }}
-          onChange={handleFileUpload}
+          onChange={(e) => handleFileSelect(e, 'document')}
+          multiple
         />
-        
-        <IconButton
-          aria-label="Attach file"
-          icon={<FaPaperclip />}
-          variant="ghost"
-          onClick={() => fileInputRef.current?.click()}
-        />
-        
-        <IconButton
-          aria-label="Add emoji"
-          icon={<FaSmile />}
-          variant="ghost"
-        />
-        
+        <Menu>
+          <MenuButton
+            as={IconButton}
+            icon={<FaPaperclip />}
+            variant="ghost"
+            aria-label="Attach file"
+          />
+          <MenuList>
+            <MenuItem
+              icon={<FaImage />}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Upload Images
+            </MenuItem>
+            <MenuItem
+              icon={<FaFile />}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Upload Documents
+            </MenuItem>
+          </MenuList>
+        </Menu>
         <Input
+          flex={1}
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type a message..."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
         />
-        
         <IconButton
           aria-label="Send message"
           icon={<FaPaperPlane />}
           colorScheme="blue"
-          onClick={handleSend}
-          isDisabled={!message.trim()}
+          isLoading={isSending}
+          onClick={handleSendMessage}
         />
       </HStack>
     </Box>

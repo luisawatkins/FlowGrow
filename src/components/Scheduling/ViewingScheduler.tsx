@@ -1,16 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
-  VStack,
-  HStack,
-  Grid,
   Button,
-  Text,
-  Select,
   FormControl,
   FormLabel,
   Input,
-  Textarea,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -18,207 +12,262 @@ import {
   ModalBody,
   ModalFooter,
   ModalCloseButton,
+  Grid,
+  Text,
+  VStack,
+  HStack,
   useToast,
+  Textarea,
+  SimpleGrid,
   Badge,
-  Icon,
+  Divider,
 } from '@chakra-ui/react';
-import {
-  FaCalendarAlt,
-  FaClock,
-  FaUser,
-  FaPhone,
-  FaEnvelope,
-} from 'react-icons/fa';
-import { useScheduling } from '@/hooks/useScheduling';
+import { useSession } from 'next-auth/react';
+import type { ViewingSlot, ViewingBooking } from '@/app/api/scheduling/route';
 
 interface ViewingSchedulerProps {
   propertyId: string;
-  agentId: string;
+  propertyTitle: string;
 }
+
+interface TimeSlotProps {
+  slot: ViewingSlot;
+  onSelect: (slot: ViewingSlot) => void;
+  isSelected: boolean;
+}
+
+const TimeSlot: React.FC<TimeSlotProps> = ({ slot, onSelect, isSelected }) => {
+  const startTime = new Date(slot.startTime);
+  const formattedTime = startTime.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  return (
+    <Button
+      width="full"
+      variant={isSelected ? 'solid' : 'outline'}
+      colorScheme={isSelected ? 'blue' : slot.isBooked ? 'gray' : 'blue'}
+      isDisabled={slot.isBooked}
+      onClick={() => onSelect(slot)}
+      py={6}
+    >
+      <VStack spacing={1}>
+        <Text>{formattedTime}</Text>
+        {slot.isBooked ? (
+          <Badge colorScheme="red">Booked</Badge>
+        ) : (
+          <Badge colorScheme="green">Available</Badge>
+        )}
+      </VStack>
+    </Button>
+  );
+};
 
 export const ViewingScheduler: React.FC<ViewingSchedulerProps> = ({
   propertyId,
-  agentId,
+  propertyTitle,
 }) => {
-  const [selectedDate, setSelectedDate] = useState('');
-  const [selectedTime, setSelectedTime] = useState('');
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [contactInfo, setContactInfo] = useState({
-    name: '',
-    email: '',
+  const { data: session } = useSession();
+  const toast = useToast();
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [availableSlots, setAvailableSlots] = useState<ViewingSlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<ViewingSlot | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: session?.user?.name || '',
+    email: session?.user?.email || '',
     phone: '',
     notes: '',
   });
 
-  const {
-    availableSlots,
-    isLoading,
-    scheduleViewing,
-  } = useScheduling(propertyId, agentId);
+  useEffect(() => {
+    const fetchAvailableSlots = async () => {
+      try {
+        const response = await fetch(
+          `/api/scheduling?propertyId=${propertyId}&date=${selectedDate}`
+        );
+        if (!response.ok) {
+          throw new Error('Failed to fetch available slots');
+        }
 
-  const toast = useToast();
+        const data = await response.json();
+        setAvailableSlots(data.slots);
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load available slots',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    };
 
-  const handleDateSelect = (date: string) => {
-    setSelectedDate(date);
-    setSelectedTime('');
+    fetchAvailableSlots();
+  }, [propertyId, selectedDate, toast]);
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedDate(e.target.value);
+    setSelectedSlot(null);
   };
 
-  const handleTimeSelect = (time: string) => {
-    setSelectedTime(time);
+  const handleSlotSelect = (slot: ViewingSlot) => {
+    setSelectedSlot(slot);
+    setIsModalOpen(true);
   };
 
-  const handleSubmit = async () => {
+  const handleBooking = async () => {
+    if (!selectedSlot) return;
+
+    setIsLoading(true);
     try {
-      await scheduleViewing({
-        date: selectedDate,
-        time: selectedTime,
-        ...contactInfo,
+      const response = await fetch('/api/scheduling', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          slotId: selectedSlot.id,
+          propertyId,
+          ...formData,
+        }),
       });
 
+      if (!response.ok) {
+        throw new Error('Failed to book viewing');
+      }
+
+      const booking: ViewingBooking = await response.json();
+
       toast({
-        title: 'Viewing scheduled successfully',
-        description: 'You will receive a confirmation email shortly.',
+        title: 'Success',
+        description: 'Property viewing scheduled successfully',
         status: 'success',
         duration: 5000,
+        isClosable: true,
       });
 
-      setIsConfirmModalOpen(false);
-      setSelectedDate('');
-      setSelectedTime('');
-      setContactInfo({
-        name: '',
-        email: '',
-        phone: '',
-        notes: '',
-      });
+      // Update available slots
+      setAvailableSlots((prev) =>
+        prev.map((slot) =>
+          slot.id === selectedSlot.id ? { ...slot, isBooked: true } : slot
+        )
+      );
+
+      setIsModalOpen(false);
+      setSelectedSlot(null);
     } catch (error) {
       toast({
-        title: 'Failed to schedule viewing',
-        description: 'Please try again later.',
+        title: 'Error',
+        description: 'Failed to schedule viewing',
         status: 'error',
         duration: 5000,
+        isClosable: true,
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const getAvailableTimesForDate = (date: string) => {
-    return availableSlots.filter(slot => slot.date === date);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
-  if (isLoading) {
-    return (
-      <Box p={6} textAlign="center">
-        <Text>Loading available viewing slots...</Text>
-      </Box>
-    );
-  }
+  // Group slots by hour
+  const groupedSlots = availableSlots.reduce<Record<string, ViewingSlot[]>>(
+    (acc, slot) => {
+      const hour = new Date(slot.startTime).getHours();
+      if (!acc[hour]) {
+        acc[hour] = [];
+      }
+      acc[hour].push(slot);
+      return acc;
+    },
+    {}
+  );
 
   return (
     <Box>
       <VStack spacing={6} align="stretch">
-        {/* Date Selection */}
+        <FormControl>
+          <FormLabel>Select Date</FormLabel>
+          <Input
+            type="date"
+            value={selectedDate}
+            onChange={handleDateChange}
+            min={new Date().toISOString().split('T')[0]}
+            max={
+              new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .split('T')[0]
+            }
+          />
+        </FormControl>
+
         <Box>
           <Text fontWeight="bold" mb={4}>
-            Select a Date
+            Available Time Slots
           </Text>
-          <Grid templateColumns="repeat(auto-fill, minmax(150px, 1fr))" gap={4}>
-            {[...new Set(availableSlots.map(slot => slot.date))].map(date => (
-              <Button
-                key={date}
-                onClick={() => handleDateSelect(date)}
-                variant={selectedDate === date ? 'solid' : 'outline'}
-                colorScheme="blue"
-                size="lg"
-                height="auto"
-                p={4}
-              >
-                <VStack spacing={1}>
-                  <Icon as={FaCalendarAlt} />
-                  <Text fontSize="sm">{formatDate(date)}</Text>
-                </VStack>
-              </Button>
-            ))}
-          </Grid>
-        </Box>
-
-        {/* Time Selection */}
-        {selectedDate && (
-          <Box>
-            <Text fontWeight="bold" mb={4}>
-              Select a Time
+          {Object.entries(groupedSlots).length === 0 ? (
+            <Text textAlign="center" color="gray.500" py={4}>
+              No available slots for this date
             </Text>
-            <Grid templateColumns="repeat(auto-fill, minmax(120px, 1fr))" gap={4}>
-              {getAvailableTimesForDate(selectedDate).map(slot => (
-                <Button
-                  key={slot.time}
-                  onClick={() => handleTimeSelect(slot.time)}
-                  variant={selectedTime === slot.time ? 'solid' : 'outline'}
-                  colorScheme="blue"
-                  isDisabled={!slot.available}
-                >
-                  <HStack>
-                    <Icon as={FaClock} />
-                    <Text>{slot.time}</Text>
-                  </HStack>
-                </Button>
+          ) : (
+            <VStack spacing={4}>
+              {Object.entries(groupedSlots).map(([hour, slots]) => (
+                <Box key={hour} width="full">
+                  <Text mb={2} color="gray.600">
+                    {new Date(slots[0].startTime).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      hour12: true,
+                    })}
+                  </Text>
+                  <SimpleGrid columns={[2, 3, 4]} spacing={4}>
+                    {slots.map((slot) => (
+                      <TimeSlot
+                        key={slot.id}
+                        slot={slot}
+                        onSelect={handleSlotSelect}
+                        isSelected={selectedSlot?.id === slot.id}
+                      />
+                    ))}
+                  </SimpleGrid>
+                </Box>
               ))}
-            </Grid>
-          </Box>
-        )}
-
-        {/* Schedule Button */}
-        {selectedDate && selectedTime && (
-          <Button
-            colorScheme="blue"
-            size="lg"
-            onClick={() => setIsConfirmModalOpen(true)}
-          >
-            Schedule Viewing
-          </Button>
-        )}
+            </VStack>
+          )}
+        </Box>
       </VStack>
 
-      {/* Confirmation Modal */}
-      <Modal
-        isOpen={isConfirmModalOpen}
-        onClose={() => setIsConfirmModalOpen(false)}
-        size="lg"
-      >
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Confirm Viewing</ModalHeader>
+          <ModalHeader>Schedule Property Viewing</ModalHeader>
           <ModalCloseButton />
-          
+
           <ModalBody>
-            <VStack spacing={6} align="stretch">
-              <Box>
-                <Badge colorScheme="blue" mb={2}>Selected Time</Badge>
-                <HStack>
-                  <Icon as={FaCalendarAlt} />
-                  <Text>{formatDate(selectedDate)}</Text>
-                  <Icon as={FaClock} />
-                  <Text>{selectedTime}</Text>
-                </HStack>
+            <VStack spacing={4}>
+              <Box width="full">
+                <Text fontWeight="bold">{propertyTitle}</Text>
+                <Text color="gray.600">
+                  {selectedSlot &&
+                    new Date(selectedSlot.startTime).toLocaleString([], {
+                      dateStyle: 'full',
+                      timeStyle: 'short',
+                    })}
+                </Text>
               </Box>
+
+              <Divider />
 
               <FormControl isRequired>
                 <FormLabel>Name</FormLabel>
                 <Input
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, name: e.target.value }))
+                  }
                   placeholder="Enter your name"
-                  value={contactInfo.name}
-                  onChange={(e) => setContactInfo(prev => ({
-                    ...prev,
-                    name: e.target.value,
-                  }))}
-                  leftIcon={<Icon as={FaUser} />}
                 />
               </FormControl>
 
@@ -226,58 +275,49 @@ export const ViewingScheduler: React.FC<ViewingSchedulerProps> = ({
                 <FormLabel>Email</FormLabel>
                 <Input
                   type="email"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, email: e.target.value }))
+                  }
                   placeholder="Enter your email"
-                  value={contactInfo.email}
-                  onChange={(e) => setContactInfo(prev => ({
-                    ...prev,
-                    email: e.target.value,
-                  }))}
-                  leftIcon={<Icon as={FaEnvelope} />}
-                />
-              </FormControl>
-
-              <FormControl isRequired>
-                <FormLabel>Phone</FormLabel>
-                <Input
-                  type="tel"
-                  placeholder="Enter your phone number"
-                  value={contactInfo.phone}
-                  onChange={(e) => setContactInfo(prev => ({
-                    ...prev,
-                    phone: e.target.value,
-                  }))}
-                  leftIcon={<Icon as={FaPhone} />}
                 />
               </FormControl>
 
               <FormControl>
-                <FormLabel>Additional Notes</FormLabel>
+                <FormLabel>Phone (optional)</FormLabel>
+                <Input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, phone: e.target.value }))
+                  }
+                  placeholder="Enter your phone number"
+                />
+              </FormControl>
+
+              <FormControl>
+                <FormLabel>Notes (optional)</FormLabel>
                 <Textarea
+                  value={formData.notes}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, notes: e.target.value }))
+                  }
                   placeholder="Any special requests or questions?"
-                  value={contactInfo.notes}
-                  onChange={(e) => setContactInfo(prev => ({
-                    ...prev,
-                    notes: e.target.value,
-                  }))}
                 />
               </FormControl>
             </VStack>
           </ModalBody>
 
           <ModalFooter>
-            <Button
-              variant="ghost"
-              mr={3}
-              onClick={() => setIsConfirmModalOpen(false)}
-            >
+            <Button variant="ghost" mr={3} onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
             <Button
               colorScheme="blue"
-              onClick={handleSubmit}
-              isDisabled={!contactInfo.name || !contactInfo.email || !contactInfo.phone}
+              onClick={handleBooking}
+              isLoading={isLoading}
             >
-              Confirm Viewing
+              Schedule Viewing
             </Button>
           </ModalFooter>
         </ModalContent>
