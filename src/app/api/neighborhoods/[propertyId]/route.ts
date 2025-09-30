@@ -1,148 +1,241 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Mock neighborhood data (replace with actual database/API integration)
-const mockNeighborhoods = new Map([
+interface School {
+  id: string;
+  name: string;
+  type: 'elementary' | 'middle' | 'high' | 'private';
+  rating: number;
+  distance: number;
+  grades: string;
+  students: number;
+  location: {
+    lat: number;
+    lng: number;
+  };
+}
+
+interface PointOfInterest {
+  id: string;
+  name: string;
+  type: string;
+  rating: number;
+  distance: number;
+  location: {
+    lat: number;
+    lng: number;
+  };
+}
+
+interface TransitStop {
+  id: string;
+  name: string;
+  type: 'bus' | 'train' | 'subway';
+  lines: string[];
+  distance: number;
+  location: {
+    lat: number;
+    lng: number;
+  };
+}
+
+interface NeighborhoodData {
+  overview: {
+    name: string;
+    description: string;
+    population: number;
+    medianIncome: number;
+    medianAge: number;
+    crimeRate: 'low' | 'moderate' | 'high';
+    walkScore: number;
+    transitScore: number;
+    bikeScore: number;
+  };
+  schools: {
+    averageRating: number;
+    schools: School[];
+  };
+  amenities: {
+    categories: {
+      name: string;
+      count: number;
+      items: PointOfInterest[];
+    }[];
+  };
+  transit: {
+    stops: TransitStop[];
+    commuteTime: {
+      driving: number;
+      transit: number;
+      walking: number;
+      cycling: number;
+    };
+  };
+  demographics: {
+    ageDistribution: {
+      range: string;
+      percentage: number;
+    }[];
+    householdTypes: {
+      type: string;
+      percentage: number;
+    }[];
+    education: {
+      level: string;
+      percentage: number;
+    }[];
+  };
+}
+
+// Mock neighborhood data
+const neighborhoods = new Map<string, NeighborhoodData>([
   ['1', {
-    id: '1',
-    name: 'Downtown District',
-    overview: 'Vibrant urban neighborhood with excellent amenities',
-    walkScore: 92,
-    transitScore: 88,
-    crimeRate: 15,
-    medianHomePrice: 750000,
-    priceHistory: [
-      { year: 2020, price: 650000 },
-      { year: 2021, price: 680000 },
-      { year: 2022, price: 720000 },
-      { year: 2023, price: 750000 },
-    ],
-    schools: [
-      {
-        id: '1',
-        name: 'Downtown Elementary',
-        type: 'Public',
-        grades: 'K-5',
-        rating: 8.5,
-        distance: 0.3,
-        students: 450,
-        reviews: {
-          count: 124,
-          average: 4.2,
-        },
-      },
-      {
-        id: '2',
-        name: 'City High School',
-        type: 'Public',
-        grades: '9-12',
-        rating: 9.0,
-        distance: 0.8,
-        students: 1200,
-        reviews: {
-          count: 256,
-          average: 4.5,
-        },
-      },
-    ],
-    transportation: {
-      publicTransit: [
+    overview: {
+      name: 'Downtown District',
+      description: 'A vibrant urban neighborhood with easy access to restaurants, shopping, and entertainment.',
+      population: 25000,
+      medianIncome: 85000,
+      medianAge: 34,
+      crimeRate: 'low',
+      walkScore: 92,
+      transitScore: 88,
+      bikeScore: 76,
+    },
+    schools: {
+      averageRating: 8.2,
+      schools: [
         {
-          type: 'Subway Station',
-          name: 'Downtown Central',
-          distance: 0.2,
-          lines: ['Red', 'Blue'],
+          id: '1',
+          name: 'Downtown Elementary',
+          type: 'elementary',
+          rating: 8.5,
+          distance: 0.5,
+          grades: 'K-5',
+          students: 450,
+          location: {
+            lat: 40.7128,
+            lng: -74.0060,
+          },
         },
         {
-          type: 'Bus Stop',
-          name: 'Main St & 5th Ave',
-          distance: 0.1,
-          lines: ['10', '15', '22'],
+          id: '2',
+          name: 'City Middle School',
+          type: 'middle',
+          rating: 8.0,
+          distance: 0.8,
+          grades: '6-8',
+          students: 600,
+          location: {
+            lat: 40.7138,
+            lng: -74.0070,
+          },
         },
-      ],
-      commuteTimes: [
         {
-          destination: 'Financial District',
-          time: 15,
-          mode: 'transit',
-        },
-        {
-          destination: 'Airport',
-          time: 45,
-          mode: 'driving',
+          id: '3',
+          name: 'Urban High',
+          type: 'high',
+          rating: 8.1,
+          distance: 1.2,
+          grades: '9-12',
+          students: 1200,
+          location: {
+            lat: 40.7148,
+            lng: -74.0080,
+          },
         },
       ],
     },
     amenities: {
-      shopping: [
+      categories: [
         {
-          name: 'City Center Mall',
-          type: 'Shopping Mall',
-          rating: 4.2,
-          distance: 0.4,
-          reviews: 1250,
+          name: 'Restaurants',
+          count: 45,
+          items: [
+            {
+              id: '1',
+              name: 'The Urban Kitchen',
+              type: 'restaurant',
+              rating: 4.5,
+              distance: 0.2,
+              location: {
+                lat: 40.7129,
+                lng: -74.0061,
+              },
+            },
+            // Add more restaurants...
+          ],
         },
         {
-          name: 'Whole Foods Market',
-          type: 'Grocery Store',
-          rating: 4.5,
-          distance: 0.3,
-          reviews: 850,
-        },
-      ],
-      healthcare: [
-        {
-          name: 'Downtown Medical Center',
-          type: 'Hospital',
-          rating: 4.3,
-          distance: 0.6,
-          reviews: 980,
-        },
-        {
-          name: 'City Dental Care',
-          type: 'Dental Clinic',
-          rating: 4.8,
-          distance: 0.4,
-          reviews: 320,
-        },
-      ],
-      dining: [
-        {
-          name: 'The Urban Kitchen',
-          type: 'Restaurant',
-          rating: 4.6,
-          distance: 0.2,
-          reviews: 750,
+          name: 'Shopping',
+          count: 32,
+          items: [
+            {
+              id: '2',
+              name: 'City Mall',
+              type: 'shopping',
+              rating: 4.2,
+              distance: 0.4,
+              location: {
+                lat: 40.7130,
+                lng: -74.0062,
+              },
+            },
+            // Add more shopping locations...
+          ],
         },
         {
-          name: 'Café Central',
-          type: 'Café',
-          rating: 4.4,
-          distance: 0.1,
-          reviews: 420,
-        },
-      ],
-      recreation: [
-        {
-          name: 'Central Park',
-          type: 'Park',
-          rating: 4.7,
-          distance: 0.5,
-          reviews: 2100,
-        },
-        {
-          name: 'City Fitness Center',
-          type: 'Gym',
-          rating: 4.3,
-          distance: 0.3,
-          reviews: 560,
+          name: 'Parks',
+          count: 8,
+          items: [
+            {
+              id: '3',
+              name: 'Central Park',
+              type: 'park',
+              rating: 4.8,
+              distance: 0.3,
+              location: {
+                lat: 40.7131,
+                lng: -74.0063,
+              },
+            },
+            // Add more parks...
+          ],
         },
       ],
     },
+    transit: {
+      stops: [
+        {
+          id: '1',
+          name: 'Downtown Station',
+          type: 'subway',
+          lines: ['A', 'B', 'C'],
+          distance: 0.2,
+          location: {
+            lat: 40.7132,
+            lng: -74.0064,
+          },
+        },
+        {
+          id: '2',
+          name: 'City Bus Terminal',
+          type: 'bus',
+          lines: ['1', '2', '3'],
+          distance: 0.3,
+          location: {
+            lat: 40.7133,
+            lng: -74.0065,
+          },
+        },
+      ],
+      commuteTime: {
+        driving: 20,
+        transit: 25,
+        walking: 45,
+        cycling: 30,
+      },
+    },
     demographics: {
-      population: 25000,
-      medianAge: 34,
-      medianIncome: 85000,
       ageDistribution: [
         { range: '0-17', percentage: 15 },
         { range: '18-34', percentage: 35 },
@@ -150,10 +243,14 @@ const mockNeighborhoods = new Map([
         { range: '55+', percentage: 20 },
       ],
       householdTypes: [
-        { name: 'Single', percentage: 45 },
-        { name: 'Married', percentage: 35 },
-        { name: 'Family', percentage: 15 },
-        { name: 'Other', percentage: 5 },
+        { type: 'Single', percentage: 45 },
+        { type: 'Married', percentage: 35 },
+        { type: 'Family', percentage: 20 },
+      ],
+      education: [
+        { level: 'High School', percentage: 20 },
+        { level: 'Bachelor\'s', percentage: 45 },
+        { level: 'Graduate', percentage: 35 },
       ],
     },
   }],
@@ -164,23 +261,21 @@ export async function GET(
   { params }: { params: { propertyId: string } }
 ) {
   try {
-    // Simulate database/API delay
-    await new Promise(resolve => setTimeout(resolve, 100));
+    const propertyId = params.propertyId;
+    const neighborhoodData = neighborhoods.get(propertyId);
 
-    const neighborhood = mockNeighborhoods.get(params.propertyId);
-    
-    if (!neighborhood) {
+    if (!neighborhoodData) {
       return NextResponse.json(
-        { error: 'Neighborhood information not found' },
+        { error: 'Neighborhood data not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(neighborhood);
+    return NextResponse.json(neighborhoodData);
   } catch (error) {
-    console.error('Error fetching neighborhood info:', error);
+    console.error('Error fetching neighborhood data:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch neighborhood information' },
+      { error: 'Failed to fetch neighborhood data' },
       { status: 500 }
     );
   }
