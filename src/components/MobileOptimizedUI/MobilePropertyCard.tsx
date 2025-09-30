@@ -1,205 +1,180 @@
-'use client';
-
-import React, { useState } from 'react';
-import Image from 'next/image';
-import { 
-  Heart, 
-  MapPin, 
-  Bed, 
-  Bath, 
-  Square, 
-  Share2,
-  Eye,
-  Star
-} from 'lucide-react';
+import React from 'react';
+import {
+  Box,
+  Image,
+  Text,
+  HStack,
+  VStack,
+  Icon,
+  Badge,
+  IconButton,
+  useColorModeValue,
+  Flex,
+  Spacer,
+} from '@chakra-ui/react';
+import {
+  FaBed,
+  FaBath,
+  FaRuler,
+  FaHeart,
+  FaRegHeart,
+  FaCamera,
+  FaMapMarkerAlt,
+} from 'react-icons/fa';
+import { useRouter } from 'next/router';
 
 interface MobilePropertyCardProps {
   property: {
     id: string;
     title: string;
     price: number;
+    imageUrl: string;
+    bedrooms: number;
+    bathrooms: number;
+    squareFeet: number;
     location: string;
-    images: string[];
-    bedrooms?: number;
-    bathrooms?: number;
-    area?: number;
-    rating?: number;
+    propertyType: string;
     isFavorite?: boolean;
-    isOffline?: boolean;
+    imageCount?: number;
+    isNew?: boolean;
+    isPriceReduced?: boolean;
   };
-  onFavorite?: (propertyId: string) => void;
-  onShare?: (propertyId: string) => void;
-  onView?: (propertyId: string) => void;
-  className?: string;
+  onFavoriteToggle?: (id: string) => void;
 }
 
-const MobilePropertyCard: React.FC<MobilePropertyCardProps> = ({
+export const MobilePropertyCard: React.FC<MobilePropertyCardProps> = ({
   property,
-  onFavorite,
-  onShare,
-  onView,
-  className = ''
+  onFavoriteToggle,
 }) => {
-  const [imageError, setImageError] = useState(false);
-  const [isFavorited, setIsFavorited] = useState(property.isFavorite || false);
+  const router = useRouter();
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
 
-  const handleFavorite = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsFavorited(!isFavorited);
-    onFavorite?.(property.id);
+  const handleClick = () => {
+    router.push(`/properties/${property.id}`);
   };
 
-  const handleShare = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onShare?.(property.id);
-  };
-
-  const handleView = () => {
-    onView?.(property.id);
-  };
-
-  const formatPrice = (price: number) => {
-    if (price >= 1000000) {
-      return `$${(price / 1000000).toFixed(1)}M`;
-    } else if (price >= 1000) {
-      return `$${(price / 1000).toFixed(0)}K`;
-    }
-    return `$${price.toLocaleString()}`;
-  };
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(price);
 
   return (
-    <div 
-      className={`
-        bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden
-        transition-all duration-200 hover:shadow-md active:scale-98
-        ${className}
-      `}
-      onClick={handleView}
+    <Box
+      bg={bgColor}
+      borderWidth="1px"
+      borderColor={borderColor}
+      borderRadius="lg"
+      overflow="hidden"
+      onClick={handleClick}
+      cursor="pointer"
+      position="relative"
+      transition="transform 0.2s"
+      _hover={{ transform: 'translateY(-2px)' }}
+      _active={{ transform: 'translateY(0)' }}
     >
-      {/* Image Container */}
-      <div className="relative aspect-[4/3] overflow-hidden">
-        {!imageError && property.images[0] ? (
-          <Image
-            src={property.images[0]}
-            alt={property.title}
-            fill
-            className="object-cover transition-transform duration-200 hover:scale-105"
-            onError={() => setImageError(true)}
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-            <div className="text-gray-400 text-center">
-              <div className="text-4xl mb-2">🏠</div>
-              <div className="text-sm">No Image</div>
-            </div>
-          </div>
-        )}
-        
-        {/* Offline Indicator */}
-        {property.isOffline && (
-          <div className="absolute top-2 left-2 bg-orange-500 text-white text-xs px-2 py-1 rounded-full">
-            Offline
-          </div>
-        )}
-        
-        {/* Action Buttons */}
-        <div className="absolute top-2 right-2 flex flex-col gap-2">
-          <button
-            onClick={handleFavorite}
-            className={`
-              w-8 h-8 rounded-full flex items-center justify-center
-              transition-all duration-200 backdrop-blur-sm
-              ${isFavorited 
-                ? 'bg-red-500 text-white' 
-                : 'bg-white/80 text-gray-600 hover:bg-white'
-              }
-            `}
+      {/* Image Section */}
+      <Box position="relative">
+        <Image
+          src={property.imageUrl}
+          alt={property.title}
+          height="200px"
+          width="100%"
+          objectFit="cover"
+        />
+
+        {/* Image Count Badge */}
+        {property.imageCount && (
+          <HStack
+            position="absolute"
+            bottom={2}
+            right={2}
+            bg="blackAlpha.700"
+            color="white"
+            px={2}
+            py={1}
+            borderRadius="md"
+            spacing={1}
           >
-            <Heart 
-              size={16} 
-              className={isFavorited ? 'fill-current' : ''}
-            />
-          </button>
-          
-          <button
-            onClick={handleShare}
-            className="w-8 h-8 rounded-full bg-white/80 text-gray-600 hover:bg-white flex items-center justify-center transition-all duration-200 backdrop-blur-sm"
-          >
-            <Share2 size={16} />
-          </button>
-        </div>
-        
-        {/* Price Badge */}
-        <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1">
-          <span className="text-lg font-bold text-gray-900">
-            {formatPrice(property.price)}
-          </span>
-        </div>
-      </div>
-      
-      {/* Content */}
-      <div className="p-4">
-        {/* Title and Rating */}
-        <div className="flex items-start justify-between mb-2">
-          <h3 className="font-semibold text-gray-900 text-base leading-tight flex-1 pr-2">
-            {property.title}
-          </h3>
-          {property.rating && (
-            <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-full">
-              <Star size={12} className="text-yellow-500 fill-current" />
-              <span className="text-xs font-medium text-yellow-700">
-                {property.rating.toFixed(1)}
-              </span>
-            </div>
+            <Icon as={FaCamera} boxSize={3} />
+            <Text fontSize="sm">{property.imageCount}</Text>
+          </HStack>
+        )}
+
+        {/* Status Badges */}
+        <HStack position="absolute" top={2} left={2} spacing={2}>
+          {property.isNew && (
+            <Badge colorScheme="green" variant="solid">
+              New
+            </Badge>
           )}
-        </div>
-        
-        {/* Location */}
-        <div className="flex items-center gap-1 mb-3">
-          <MapPin size={14} className="text-gray-400" />
-          <span className="text-sm text-gray-600 truncate">
-            {property.location}
-          </span>
-        </div>
-        
-        {/* Property Details */}
-        <div className="flex items-center gap-4 text-sm text-gray-500">
-          {property.bedrooms && (
-            <div className="flex items-center gap-1">
-              <Bed size={14} />
-              <span>{property.bedrooms}</span>
-            </div>
+          {property.isPriceReduced && (
+            <Badge colorScheme="red" variant="solid">
+              Price Reduced
+            </Badge>
           )}
-          {property.bathrooms && (
-            <div className="flex items-center gap-1">
-              <Bath size={14} />
-              <span>{property.bathrooms}</span>
-            </div>
-          )}
-          {property.area && (
-            <div className="flex items-center gap-1">
-              <Square size={14} />
-              <span>{property.area} sq ft</span>
-            </div>
-          )}
-        </div>
-        
-        {/* View Button */}
-        <button
-          onClick={handleView}
-          className="w-full mt-3 bg-blue-600 text-white py-2 px-4 rounded-lg font-medium text-sm transition-colors duration-200 hover:bg-blue-700 active:bg-blue-800"
-        >
-          <div className="flex items-center justify-center gap-2">
-            <Eye size={16} />
-            View Details
-          </div>
-        </button>
-      </div>
-    </div>
+        </HStack>
+
+        {/* Favorite Button */}
+        <IconButton
+          aria-label={property.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          icon={property.isFavorite ? <FaHeart /> : <FaRegHeart />}
+          position="absolute"
+          top={2}
+          right={2}
+          colorScheme={property.isFavorite ? 'red' : 'gray'}
+          variant="solid"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFavoriteToggle?.(property.id);
+          }}
+        />
+      </Box>
+
+      {/* Content Section */}
+      <Box p={4}>
+        <VStack align="stretch" spacing={2}>
+          {/* Price and Type */}
+          <Flex align="center">
+            <Text fontSize="xl" fontWeight="bold">
+              {formatPrice(property.price)}
+            </Text>
+            <Spacer />
+            <Badge variant="subtle" colorScheme="blue">
+              {property.propertyType}
+            </Badge>
+          </Flex>
+
+          {/* Location */}
+          <HStack color="gray.600" spacing={1}>
+            <Icon as={FaMapMarkerAlt} boxSize={3} />
+            <Text fontSize="sm" noOfLines={1}>
+              {property.location}
+            </Text>
+          </HStack>
+
+          {/* Property Details */}
+          <HStack spacing={4} mt={2}>
+            <HStack spacing={1}>
+              <Icon as={FaBed} color="gray.500" />
+              <Text fontSize="sm">{property.bedrooms}</Text>
+            </HStack>
+            <HStack spacing={1}>
+              <Icon as={FaBath} color="gray.500" />
+              <Text fontSize="sm">{property.bathrooms}</Text>
+            </HStack>
+            <HStack spacing={1}>
+              <Icon as={FaRuler} color="gray.500" />
+              <Text fontSize="sm">
+                {property.squareFeet.toLocaleString()} sqft
+              </Text>
+            </HStack>
+          </HStack>
+        </VStack>
+      </Box>
+    </Box>
   );
 };
-
-export default MobilePropertyCard;
