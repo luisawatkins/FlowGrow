@@ -17,54 +17,88 @@ interface FilterPanelProps {
 }
 
 export interface PropertyFilters {
-  priceRange: [number, number];
-  propertyTypes: string[];
-  bedrooms: number | null;
-  bathrooms: number | null;
-  amenities: string[];
+  priceRange?: {
+    min: number;
+    max: number;
+  };
+  propertyType?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  location?: string;
+  squareFeet?: {
+    min: number;
+    max: number;
+  };
+  sortBy?: 'price-asc' | 'price-desc' | 'newest' | 'size-desc';
 }
 
 export const FilterPanel: React.FC<FilterPanelProps> = ({ onFilterChange }) => {
   const [filters, setFilters] = React.useState<PropertyFilters>({
-    priceRange: [0, 1000000],
-    propertyTypes: [],
-    bedrooms: null,
-    bathrooms: null,
-    amenities: [],
+    priceRange: {
+      min: 0,
+      max: 1000000
+    },
+    propertyType: undefined,
+    bedrooms: undefined,
+    bathrooms: undefined,
+    location: undefined,
+    squareFeet: {
+      min: 0,
+      max: 5000
+    },
+    sortBy: undefined
   });
 
   const handlePriceRangeChange = (range: [number, number]) => {
-    const newFilters = { ...filters, priceRange: range };
+    const newFilters = {
+      ...filters,
+      priceRange: {
+        min: range[0],
+        max: range[1]
+      }
+    };
     setFilters(newFilters);
     onFilterChange(newFilters);
   };
 
-  const handlePropertyTypeChange = (type: string, checked: boolean) => {
-    const newTypes = checked
-      ? [...filters.propertyTypes, type]
-      : filters.propertyTypes.filter(t => t !== type);
-    const newFilters = { ...filters, propertyTypes: newTypes };
+  const handlePropertyTypeChange = (type: string) => {
+    const newFilters = { ...filters, propertyType: type };
     setFilters(newFilters);
     onFilterChange(newFilters);
   };
 
   const handleBedroomsChange = (value: string) => {
-    const newFilters = { ...filters, bedrooms: value ? parseInt(value) : null };
+    const newFilters = { ...filters, bedrooms: value ? parseInt(value) : undefined };
     setFilters(newFilters);
     onFilterChange(newFilters);
   };
 
   const handleBathroomsChange = (value: string) => {
-    const newFilters = { ...filters, bathrooms: value ? parseInt(value) : null };
+    const newFilters = { ...filters, bathrooms: value ? parseInt(value) : undefined };
     setFilters(newFilters);
     onFilterChange(newFilters);
   };
 
-  const handleAmenityChange = (amenity: string, checked: boolean) => {
-    const newAmenities = checked
-      ? [...filters.amenities, amenity]
-      : filters.amenities.filter(a => a !== amenity);
-    const newFilters = { ...filters, amenities: newAmenities };
+  const handleLocationChange = (value: string) => {
+    const newFilters = { ...filters, location: value || undefined };
+    setFilters(newFilters);
+    onFilterChange(newFilters);
+  };
+
+  const handleSquareFeetChange = (range: [number, number]) => {
+    const newFilters = {
+      ...filters,
+      squareFeet: {
+        min: range[0],
+        max: range[1]
+      }
+    };
+    setFilters(newFilters);
+    onFilterChange(newFilters);
+  };
+
+  const handleSortChange = (value: string) => {
+    const newFilters = { ...filters, sortBy: value as PropertyFilters['sortBy'] };
     setFilters(newFilters);
     onFilterChange(newFilters);
   };
@@ -73,9 +107,23 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onFilterChange }) => {
     <Box p={4} bg="white" borderRadius="md" shadow="sm">
       <VStack spacing={6} align="stretch">
         <Box>
+          <Heading size="sm" mb={3}>Sort By</Heading>
+          <Select
+            placeholder="Default"
+            value={filters.sortBy}
+            onChange={(e) => handleSortChange(e.target.value)}
+          >
+            <option value="price-asc">Price: Low to High</option>
+            <option value="price-desc">Price: High to Low</option>
+            <option value="newest">Newest First</option>
+            <option value="size-desc">Largest First</option>
+          </Select>
+        </Box>
+
+        <Box>
           <Heading size="sm" mb={3}>Price Range</Heading>
           <RangeSlider
-            defaultValue={filters.priceRange}
+            defaultValue={[filters.priceRange?.min || 0, filters.priceRange?.max || 1000000]}
             min={0}
             max={1000000}
             step={10000}
@@ -88,32 +136,68 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onFilterChange }) => {
             <RangeSliderThumb index={1} />
           </RangeSlider>
           <Text fontSize="sm" color="gray.600">
-            ${filters.priceRange[0].toLocaleString()} - ${filters.priceRange[1].toLocaleString()}
+            ${(filters.priceRange?.min || 0).toLocaleString()} - ${(filters.priceRange?.max || 1000000).toLocaleString()}
+          </Text>
+        </Box>
+
+        <Box>
+          <Heading size="sm" mb={3}>Square Feet</Heading>
+          <RangeSlider
+            defaultValue={[filters.squareFeet?.min || 0, filters.squareFeet?.max || 5000]}
+            min={0}
+            max={5000}
+            step={100}
+            onChange={handleSquareFeetChange}
+          >
+            <RangeSliderTrack>
+              <RangeSliderFilledTrack />
+            </RangeSliderTrack>
+            <RangeSliderThumb index={0} />
+            <RangeSliderThumb index={1} />
+          </RangeSlider>
+          <Text fontSize="sm" color="gray.600">
+            {(filters.squareFeet?.min || 0).toLocaleString()} - {(filters.squareFeet?.max || 5000).toLocaleString()} sq ft
           </Text>
         </Box>
 
         <Box>
           <Heading size="sm" mb={3}>Property Type</Heading>
-          <VStack align="start">
-            {['House', 'Apartment', 'Condo', 'Townhouse'].map(type => (
-              <Checkbox
-                key={type}
-                onChange={(e) => handlePropertyTypeChange(type, e.target.checked)}
-              >
-                {type}
-              </Checkbox>
-            ))}
-          </VStack>
+          <Select
+            placeholder="Any"
+            value={filters.propertyType}
+            onChange={(e) => handlePropertyTypeChange(e.target.value)}
+          >
+            <option value="House">House</option>
+            <option value="Apartment">Apartment</option>
+            <option value="Studio">Studio</option>
+            <option value="Villa">Villa</option>
+          </Select>
+        </Box>
+
+        <Box>
+          <Heading size="sm" mb={3}>Location</Heading>
+          <Select
+            placeholder="Any"
+            value={filters.location}
+            onChange={(e) => handleLocationChange(e.target.value)}
+          >
+            <option value="Downtown">Downtown</option>
+            <option value="Suburbs">Suburbs</option>
+            <option value="Beachfront">Beachfront</option>
+            <option value="City Center">City Center</option>
+            <option value="Mountain Area">Mountain Area</option>
+          </Select>
         </Box>
 
         <Box>
           <Heading size="sm" mb={3}>Bedrooms</Heading>
           <Select
             placeholder="Any"
+            value={filters.bedrooms}
             onChange={(e) => handleBedroomsChange(e.target.value)}
           >
-            {[1, 2, 3, 4, '5+'].map(num => (
-              <option key={num} value={num}>{num}</option>
+            {[1, 2, 3, 4, 5].map(num => (
+              <option key={num} value={num}>{num}+ Bedrooms</option>
             ))}
           </Select>
         </Box>
@@ -122,33 +206,13 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onFilterChange }) => {
           <Heading size="sm" mb={3}>Bathrooms</Heading>
           <Select
             placeholder="Any"
+            value={filters.bathrooms}
             onChange={(e) => handleBathroomsChange(e.target.value)}
           >
-            {[1, 1.5, 2, 2.5, 3, '3+'].map(num => (
-              <option key={num} value={num}>{num}</option>
+            {[1, 2, 3, 4].map(num => (
+              <option key={num} value={num}>{num}+ Bathrooms</option>
             ))}
           </Select>
-        </Box>
-
-        <Box>
-          <Heading size="sm" mb={3}>Amenities</Heading>
-          <VStack align="start">
-            {[
-              'Parking',
-              'Pool',
-              'Garden',
-              'Gym',
-              'Security System',
-              'Air Conditioning'
-            ].map(amenity => (
-              <Checkbox
-                key={amenity}
-                onChange={(e) => handleAmenityChange(amenity, e.target.checked)}
-              >
-                {amenity}
-              </Checkbox>
-            ))}
-          </VStack>
         </Box>
       </VStack>
     </Box>
