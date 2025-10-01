@@ -1,108 +1,81 @@
-// Property Notes Hook
+import { useState, useEffect } from 'react';
+import { PropertyNote, NoteFilter, NoteSearchResult, CreateNoteRequest, UpdateNoteRequest } from '../types/notes';
+import { NotesService } from '../lib/notesService';
 
-import { useState, useEffect, useCallback } from 'react';
-import { 
-  PropertyNote, 
-  CreateNoteRequest, 
-  UpdateNoteRequest, 
-  NotesFilter,
-  UseNotesReturn,
-  NotesError 
-} from '@/types/notes';
-import { notesService } from '@/lib/notesService';
-
-export const useNotes = (propertyId?: string, filter?: NotesFilter): UseNotesReturn => {
+export const useNotes = (propertyId?: string) => {
   const [notes, setNotes] = useState<PropertyNote[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<NotesError | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadNotes = useCallback(async () => {
+  const loadNotes = async () => {
     if (!propertyId) return;
-
+    
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
-      const fetchedNotes = await notesService.getNotesByProperty(propertyId, filter);
-      setNotes(fetchedNotes);
+      const propertyNotes = await NotesService.getPropertyNotes(propertyId);
+      setNotes(propertyNotes);
     } catch (err) {
-      setError(err as NotesError);
+      setError(err instanceof Error ? err.message : 'Failed to load notes');
     } finally {
       setLoading(false);
     }
-  }, [propertyId, filter]);
+  };
 
-  const createNote = useCallback(async (request: CreateNoteRequest): Promise<PropertyNote> => {
+  const createNote = async (request: CreateNoteRequest) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setError(null);
-      const newNote = await notesService.createNote(request);
-      setNotes(prev => [newNote, ...prev]);
+      const newNote = await NotesService.createNote(request);
+      setNotes(prev => [...prev, newNote]);
       return newNote;
     } catch (err) {
-      setError(err as NotesError);
+      setError(err instanceof Error ? err.message : 'Failed to create note');
       throw err;
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
-  const updateNote = useCallback(async (id: string, request: UpdateNoteRequest): Promise<PropertyNote> => {
+  const updateNote = async (request: UpdateNoteRequest) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setError(null);
-      const updatedNote = await notesService.updateNote(id, request);
-      setNotes(prev => prev.map(note => note.id === id ? updatedNote : note));
+      const updatedNote = await NotesService.updateNote(request);
+      setNotes(prev => prev.map(note => note.id === request.id ? updatedNote : note));
       return updatedNote;
     } catch (err) {
-      setError(err as NotesError);
+      setError(err instanceof Error ? err.message : 'Failed to update note');
       throw err;
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
-  const deleteNote = useCallback(async (id: string): Promise<void> => {
+  const deleteNote = async (noteId: string) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setError(null);
-      await notesService.deleteNote(id);
-      setNotes(prev => prev.filter(note => note.id !== id));
+      const success = await NotesService.deleteNote(noteId);
+      if (success) {
+        setNotes(prev => prev.filter(note => note.id !== noteId));
+      }
+      return success;
     } catch (err) {
-      setError(err as NotesError);
+      setError(err instanceof Error ? err.message : 'Failed to delete note');
       throw err;
+    } finally {
+      setLoading(false);
     }
-  }, []);
-
-  const getNote = useCallback(async (id: string): Promise<PropertyNote> => {
-    try {
-      setError(null);
-      return await notesService.getNote(id);
-    } catch (err) {
-      setError(err as NotesError);
-      throw err;
-    }
-  }, []);
-
-  const getNotesByProperty = useCallback(async (propertyId: string, filter?: NotesFilter): Promise<PropertyNote[]> => {
-    try {
-      setError(null);
-      return await notesService.getNotesByProperty(propertyId, filter);
-    } catch (err) {
-      setError(err as NotesError);
-      throw err;
-    }
-  }, []);
-
-  const searchNotes = useCallback(async (query: string, filter?: NotesFilter): Promise<PropertyNote[]> => {
-    try {
-      setError(null);
-      return await notesService.searchNotes(query, filter);
-    } catch (err) {
-      setError(err as NotesError);
-      throw err;
-    }
-  }, []);
-
-  const refreshNotes = useCallback(async (): Promise<void> => {
-    await loadNotes();
-  }, [loadNotes]);
+  };
 
   useEffect(() => {
     loadNotes();
-  }, [loadNotes]);
+  }, [propertyId]);
 
   return {
     notes,
@@ -111,9 +84,35 @@ export const useNotes = (propertyId?: string, filter?: NotesFilter): UseNotesRet
     createNote,
     updateNote,
     deleteNote,
-    getNote,
-    getNotesByProperty,
-    searchNotes,
-    refreshNotes
+    refreshNotes: loadNotes
+  };
+};
+
+export const useNoteSearch = () => {
+  const [searchResult, setSearchResult] = useState<NoteSearchResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const searchNotes = async (filter: NoteFilter, page: number = 1, limit: number = 10) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const result = await NotesService.searchNotes(filter, page, limit);
+      setSearchResult(result);
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to search notes');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    searchResult,
+    loading,
+    error,
+    searchNotes
   };
 };
