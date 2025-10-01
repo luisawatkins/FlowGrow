@@ -1,123 +1,203 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { PropertyComparison, ComparisonResult, CreateComparisonRequest, UpdateComparisonRequest, AddPropertyToComparisonRequest } from '../types/comparison';
+import { ComparisonService } from '../lib/comparisonService';
 
-interface Property {
-  id: string;
-  title: string;
-  price: number;
-  imageUrl: string;
-  bedrooms: number;
-  bathrooms: number;
-  squareFeet: number;
-  propertyType: string;
-  location: string;
-  yearBuilt: number;
-  parking: string;
-  features: string[];
-  amenities: string[];
-}
+export const useComparison = (comparisonId?: string) => {
+  const [comparison, setComparison] = useState<PropertyComparison | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export function useComparison() {
-  const [comparisonList, setComparisonList] = useState<Property[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchComparisonList = useCallback(async () => {
+  const loadComparison = async () => {
+    if (!comparisonId) return;
+    
+    setLoading(true);
+    setError(null);
+    
     try {
-      setIsLoading(true);
-      const response = await fetch('/api/comparison');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch comparison list');
-      }
-      
-      const data = await response.json();
-      setComparisonList(data);
-    } catch (error) {
-      console.error('Error fetching comparison list:', error);
+      const comparisonData = await ComparisonService.getComparisonById(comparisonId);
+      setComparison(comparisonData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load comparison');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  };
+
+  const updateComparison = async (request: UpdateComparisonRequest) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const updatedComparison = await ComparisonService.updateComparison(request);
+      setComparison(updatedComparison);
+      return updatedComparison;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update comparison');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addProperty = async (request: AddPropertyToComparisonRequest) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const newProperty = await ComparisonService.addPropertyToComparison(request);
+      if (comparison) {
+        setComparison({
+          ...comparison,
+          properties: [...comparison.properties, newProperty],
+          updatedAt: new Date()
+        });
+      }
+        return newProperty;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add property');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeProperty = async (propertyId: string) => {
+    if (!comparison) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const success = await ComparisonService.removePropertyFromComparison(comparison.id, propertyId);
+      if (success) {
+        setComparison({
+          ...comparison,
+          properties: comparison.properties.filter(prop => prop.propertyId !== propertyId),
+          updatedAt: new Date()
+        });
+      }
+      return success;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove property');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetchComparisonList();
-  }, [fetchComparisonList]);
-
-  const addToComparison = async (propertyId: string) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch('/api/comparison', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ propertyId }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add to comparison');
-      }
-
-      const data = await response.json();
-      setComparisonList(data);
-    } catch (error) {
-      console.error('Error adding to comparison:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const removeFromComparison = async (propertyId: string) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`/api/comparison/${propertyId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to remove from comparison');
-      }
-
-      const data = await response.json();
-      setComparisonList(data);
-    } catch (error) {
-      console.error('Error removing from comparison:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const clearComparison = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch('/api/comparison', {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to clear comparison');
-      }
-
-      setComparisonList([]);
-    } catch (error) {
-      console.error('Error clearing comparison:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const isInComparison = (propertyId: string) => {
-    return comparisonList.some(property => property.id === propertyId);
-  };
+    loadComparison();
+  }, [comparisonId]);
 
   return {
-    comparisonList,
-    isLoading,
-    addToComparison,
-    removeFromComparison,
-    clearComparison,
-    isInComparison,
+    comparison,
+    loading,
+    error,
+    updateComparison,
+    addProperty,
+    removeProperty,
+    refreshComparison: loadComparison
   };
-}
+};
+
+export const useComparisons = (userId?: string) => {
+  const [comparisons, setComparisons] = useState<PropertyComparison[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadComparisons = async () => {
+    if (!userId) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const userComparisons = await ComparisonService.getUserComparisons(userId);
+      setComparisons(userComparisons);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load comparisons');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createComparison = async (request: CreateComparisonRequest) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const newComparison = await ComparisonService.createComparison(request);
+      setComparisons(prev => [...prev, newComparison]);
+      return newComparison;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create comparison');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteComparison = async (comparisonId: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const success = await ComparisonService.deleteComparison(comparisonId);
+      if (success) {
+        setComparisons(prev => prev.filter(comp => comp.id !== comparisonId));
+      }
+      return success;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete comparison');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadComparisons();
+  }, [userId]);
+
+  return {
+    comparisons,
+    loading,
+    error,
+    createComparison,
+    deleteComparison,
+    refreshComparisons: loadComparisons
+  };
+};
+
+export const useComparisonResults = (comparisonId?: string) => {
+  const [results, setResults] = useState<ComparisonResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const calculateResults = async () => {
+    if (!comparisonId) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const comparisonResults = await ComparisonService.calculateComparisonResults(comparisonId);
+      setResults(comparisonResults);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to calculate results');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    calculateResults();
+  }, [comparisonId]);
+
+  return {
+    results,
+    loading,
+    error,
+    refreshResults: calculateResults
+  };
+};
