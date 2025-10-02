@@ -2,94 +2,56 @@ export interface PropertyComparison {
   id: string;
   userId: string;
   name: string;
-  description?: string;
-  properties: ComparisonProperty[];
-  createdAt: Date;
-  updatedAt: Date;
+  properties: string[];
+  createdAt: string;
+  updatedAt: string;
   isPublic: boolean;
-}
-
-export interface ComparisonProperty {
-  id: string;
-  propertyId: string;
-  property: {
-    id: string;
-    title: string;
-    address: string;
-    price: number;
-    imageUrl?: string;
-    bedrooms?: number;
-    bathrooms?: number;
-    squareFeet?: number;
-    propertyType: string;
-    yearBuilt?: number;
-    lotSize?: number;
-    parkingSpaces?: number;
-    features: string[];
-    amenities: string[];
-  };
-  addedAt: Date;
-  notes?: string;
-  score?: number;
+  tags: string[];
 }
 
 export interface ComparisonCriteria {
-  id: string;
-  name: string;
-  weight: number;
-  type: 'numeric' | 'boolean' | 'text';
-  higherIsBetter: boolean;
+  price: boolean;
+  size: boolean;
+  location: boolean;
+  amenities: boolean;
+  condition: boolean;
+  yearBuilt: boolean;
+  propertyType: boolean;
+  features: boolean;
 }
 
 export interface ComparisonResult {
   propertyId: string;
-  propertyTitle: string;
-  totalScore: number;
-  criteriaScores: { [criteriaId: string]: number };
+  score: number;
   rank: number;
-  strengths: string[];
-  weaknesses: string[];
-}
-
-export interface CreateComparisonRequest {
-  name: string;
-  description?: string;
-  propertyIds: string[];
-  isPublic: boolean;
-}
-
-export interface UpdateComparisonRequest {
-  id: string;
-  name?: string;
-  description?: string;
-  isPublic?: boolean;
-}
-
-export interface AddPropertyToComparisonRequest {
-  comparisonId: string;
-  propertyId: string;
-  notes?: string;
-}
-
-export interface ComparisonStats {
-  totalComparisons: number;
-  averagePropertiesPerComparison: number;
-  mostComparedProperties: { propertyId: string; count: number }[];
-  recentComparisons: PropertyComparison[];
+  advantages: string[];
+  disadvantages: string[];
+  pricePerSqFt: number;
+  valueScore: number;
 }
 
 export interface ComparisonFilter {
   userId?: string;
   isPublic?: boolean;
-  dateFrom?: Date;
-  dateTo?: Date;
-  search?: string;
+  tags?: string[];
+  dateFrom?: string;
+  dateTo?: string;
 }
 
-export interface ComparisonSearchResult {
-  comparisons: PropertyComparison[];
-  total: number;
-  page: number;
-  limit: number;
-  hasMore: boolean;
+export interface ComparisonAnalytics {
+  totalComparisons: number;
+  averagePropertiesPerComparison: number;
+  mostComparedProperties: Array<{ propertyId: string; count: number }>;
+  popularCriteria: Record<string, number>;
+  userEngagement: Array<{ date: string; comparisons: number }>;
+}
+
+export interface ComparisonShare {
+  id: string;
+  comparisonId: string;
+  shareToken: string;
+  expiresAt: string;
+  isActive: boolean;
+  viewCount: number;
+  createdAt: string;
 }

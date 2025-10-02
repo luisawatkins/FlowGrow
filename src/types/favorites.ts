@@ -1,84 +1,55 @@
-export interface FavoriteProperty {
+export interface PropertyFavorite {
   id: string;
-  userId: string;
   propertyId: string;
-  property: {
-    id: string;
-    title: string;
-    address: string;
-    price: number;
-    imageUrl?: string;
-    bedrooms?: number;
-    bathrooms?: number;
-    squareFeet?: number;
-    propertyType: string;
-  };
-  addedAt: Date;
+  userId: string;
+  addedAt: string;
   notes?: string;
   tags: string[];
-  isPublic: boolean;
+  priority: 'low' | 'medium' | 'high';
+  isActive: boolean;
 }
 
-export interface FavoriteList {
+export interface Wishlist {
   id: string;
   userId: string;
   name: string;
   description?: string;
+  properties: string[];
   isPublic: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  propertyCount: number;
-  properties: FavoriteProperty[];
-}
-
-export interface CreateFavoriteRequest {
-  propertyId: string;
-  notes?: string;
+  createdAt: string;
+  updatedAt: string;
   tags: string[];
-  isPublic: boolean;
-  listId?: string;
-}
-
-export interface UpdateFavoriteRequest {
-  id: string;
-  notes?: string;
-  tags?: string[];
-  isPublic?: boolean;
-}
-
-export interface CreateFavoriteListRequest {
-  name: string;
-  description?: string;
-  isPublic: boolean;
-}
-
-export interface UpdateFavoriteListRequest {
-  id: string;
-  name?: string;
-  description?: string;
-  isPublic?: boolean;
-}
-
-export interface FavoriteStats {
-  totalFavorites: number;
-  favoritesByList: { [listId: string]: number };
-  mostFavoritedProperties: { propertyId: string; count: number }[];
-  recentFavorites: FavoriteProperty[];
 }
 
 export interface FavoriteFilter {
-  listId?: string;
+  userId?: string;
+  propertyId?: string;
   tags?: string[];
-  isPublic?: boolean;
-  dateFrom?: Date;
-  dateTo?: Date;
-  search?: string;
+  priority?: string;
+  isActive?: boolean;
 }
 
-export interface FavoriteSearchResult {
-  favorites: FavoriteProperty[];
-  total: number;
-  page: number;
-  limit: number;
-  hasMore: boolean;
+export interface WishlistFilter {
+  userId?: string;
+  isPublic?: boolean;
+  tags?: string[];
+  name?: string;
+}
+
+export interface FavoritesAnalytics {
+  totalFavorites: number;
+  favoritesByProperty: Array<{ propertyId: string; count: number }>;
+  mostFavoritedProperties: Array<{ propertyId: string; count: number }>;
+  userEngagement: Array<{ date: string; favorites: number }>;
+  popularTags: Array<{ tag: string; count: number }>;
+}
+
+export interface WishlistShare {
+  id: string;
+  wishlistId: string;
+  shareToken: string;
+  expiresAt: string;
+  isActive: boolean;
+  viewCount: number;
+  createdAt: string;
 }
