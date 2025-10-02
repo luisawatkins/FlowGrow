@@ -4,83 +4,59 @@ export interface PropertyNote {
   userId: string;
   title: string;
   content: string;
-  category: NoteCategory;
-  priority: NotePriority;
+  type: 'general' | 'viewing' | 'research' | 'comparison' | 'reminder';
+  priority: 'low' | 'medium' | 'high';
   tags: string[];
   isPrivate: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  attachments?: NoteAttachment[];
+  createdAt: string;
+  updatedAt: string;
+  attachments?: string[];
 }
 
-export interface NoteAttachment {
+export interface PropertyComment {
   id: string;
-  noteId: string;
-  fileName: string;
-  fileUrl: string;
-  fileType: string;
-  fileSize: number;
-  uploadedAt: Date;
-}
-
-export interface NoteCategory {
-  id: string;
-  name: string;
-  color: string;
-  description?: string;
-}
-
-export interface NotePriority {
-  id: string;
-  name: string;
-  level: number;
-  color: string;
+  propertyId: string;
+  userId: string;
+  content: string;
+  parentId?: string;
+  likes: number;
+  dislikes: number;
+  isEdited: boolean;
+  createdAt: string;
+  updatedAt: string;
+  replies?: PropertyComment[];
 }
 
 export interface NoteFilter {
   propertyId?: string;
-  categoryId?: string;
-  priorityId?: string;
+  userId?: string;
+  type?: string;
+  priority?: string;
   tags?: string[];
-  isPrivate?: boolean;
-  dateFrom?: Date;
-  dateTo?: Date;
-  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
-export interface NoteStats {
+export interface CommentFilter {
+  propertyId?: string;
+  userId?: string;
+  parentId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface NotesAnalytics {
   totalNotes: number;
-  notesByCategory: { [categoryId: string]: number };
-  notesByPriority: { [priorityId: string]: number };
-  recentNotes: PropertyNote[];
-  mostUsedTags: { tag: string; count: number }[];
+  notesByType: Record<string, number>;
+  notesByPriority: Record<string, number>;
+  mostUsedTags: Array<{ tag: string; count: number }>;
+  recentActivity: Array<{ date: string; count: number }>;
 }
 
-export interface CreateNoteRequest {
-  propertyId: string;
-  title: string;
-  content: string;
-  categoryId: string;
-  priorityId: string;
-  tags: string[];
-  isPrivate: boolean;
-  attachments?: File[];
-}
-
-export interface UpdateNoteRequest {
-  id: string;
-  title?: string;
-  content?: string;
-  categoryId?: string;
-  priorityId?: string;
-  tags?: string[];
-  isPrivate?: boolean;
-}
-
-export interface NoteSearchResult {
-  notes: PropertyNote[];
-  total: number;
-  page: number;
-  limit: number;
-  hasMore: boolean;
+export interface CommentsAnalytics {
+  totalComments: number;
+  commentsByProperty: Array<{ propertyId: string; count: number }>;
+  topCommenters: Array<{ userId: string; count: number }>;
+  engagementRate: number;
+  averageLikes: number;
 }
